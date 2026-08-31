@@ -3,7 +3,7 @@
 A Fantasy Premier League squad optimiser with an open expected-points model and a
 mixed-integer solver that runs in the browser. No backend, no account, no hosting bill.
 
-**Live:** https://tobxoder-svg.github.io/fantasy-drafter/
+**Live:** https://fantasy-drafter-coral.vercel.app/
 
 ---
 
@@ -51,15 +51,30 @@ exists so the site works the moment you clone it. Regenerate it with
 
 ## Deploying
 
+The build serves from `/` by default, which is what Vercel, Netlify, a custom domain and
+`npm run dev` all expect. **GitHub Pages is the only exception** — a project page lives at
+`/<repo>/`, so the Pages workflow sets `BASE_PATH` for it. Get this wrong and the failure
+is silent and total: `index.html` loads, every asset 404s, and the page renders blank.
+
+### Vercel / Netlify
+
+Import the repo. Framework preset **Vite**, build `npm run build`, output `dist` — all
+auto-detected, and `vercel.json` pins them anyway. No environment variables needed.
+
+The data pipeline still matters here: **Refresh FPL data** commits a new snapshot to the
+repo, and that push triggers a redeploy. So set **Settings → Actions → General → Workflow
+permissions: Read and write**, then run the workflow once by hand to replace the sample
+bundle with the live league.
+
+### GitHub Pages
+
 1. Push to `main`.
 2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-3. **Settings → Actions → General → Workflow permissions: Read and write**, so the data
-   workflow can commit its snapshot.
-4. Run **Refresh FPL data** once by hand from the Actions tab to replace the sample bundle
-   with the real league. Everything after that is on a cron.
+3. **Settings → Actions → General → Workflow permissions: Read and write.**
+4. Run **Refresh FPL data** once by hand from the Actions tab.
 
-`BASE_PATH` is set from the repository name in the deploy workflow. For a custom domain or
-a `<user>.github.io` repo, set it to `/`.
+`BASE_PATH` is set from the repository name in `deploy.yml`. On a custom domain or a
+`<user>.github.io` repo, delete that `env:` block so the default `/` applies.
 
 ---
 
@@ -137,7 +152,7 @@ before anything is built on top of it.
 ## Stack
 
 Vite · React · TypeScript · Tailwind v4 · [HiGHS](https://github.com/lovasoa/highs-js)
-(WebAssembly) · GitHub Actions · GitHub Pages.
+(WebAssembly) · GitHub Actions · Vercel or GitHub Pages.
 
 ```
 scripts/fetch-fpl.mjs     FPL API -> public/data/bundle.json

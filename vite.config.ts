@@ -2,9 +2,13 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-// On GitHub Pages the site is served from /<repo>/, so assets need that prefix.
-// Override with BASE_PATH=/ when using a custom domain or a user/org page.
-const base = process.env.BASE_PATH ?? "/fantasy-drafter/";
+// Root by default — what Vercel, Netlify, a custom domain and `npm run dev` all
+// serve from. GitHub Pages is the exception, since a project page lives under
+// /<repo>/, so the Pages workflow sets BASE_PATH explicitly.
+//
+// Getting this wrong fails silently and totally: index.html loads, every asset
+// 404s, and the page renders blank with nothing on screen to explain why.
+const base = process.env.BASE_PATH ?? "/";
 
 export default defineConfig({
   base,
