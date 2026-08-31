@@ -23,10 +23,19 @@
   --accent-soft: rgb(0 137 176 / 0.12);
   --loss-soft: rgb(190 46 94 / 0.11);
   --shadow: 0 1px 2px rgb(17 24 35 / 0.05), 0 8px 24px -16px rgb(17 24 35 / 0.22);
+
+  /* The pitch is an illustrated ground, not an encoding — it is deliberately
+     outside the chart palette, and nothing on it carries meaning by hue. */
+  --turf: #2c8a57;
+  --turf-line: rgb(255 255 255 / 0.05);
+  --bench: #1f6444;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --turf: #17573c;
+    --turf-line: rgb(255 255 255 / 0.045);
+    --bench: #10402d;
     --bg: #0d1218;
     --surface: #151b23;
     --surface-2: #1b222c;
@@ -46,6 +55,9 @@
 }
 
 :root[data-theme="dark"] {
+  --turf: #17573c;
+  --turf-line: rgb(255 255 255 / 0.045);
+  --bench: #10402d;
   --bg: #0d1218;
   --surface: #151b23;
   --surface-2: #1b222c;
@@ -134,6 +146,17 @@
     box-shadow: var(--shadow);
   }
   .scroll-x { overflow-x: auto; overscroll-behavior-x: contain; }
+
+  /* Mown stripes. Subtle enough to read as turf, not as a data encoding. */
+  .pitch-turf {
+    background-color: var(--turf);
+    background-image: repeating-linear-gradient(
+      180deg,
+      transparent 0 7%,
+      var(--turf-line) 7% 14%
+    );
+  }
+  .pitch-bench { background-color: var(--bench); }
 }
 
 /* Range inputs get no useful default styling in any browser. */

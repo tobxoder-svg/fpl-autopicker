@@ -108,6 +108,15 @@ Haaland — because his defensive-action rate extrapolated to 96 per 90. Regress
 probability alone is not enough; the rates themselves have to be regressed, or the
 optimiser goes hunting for exactly these artefacts. `npm test` pins that case.
 
+### Rearranging by hand
+
+The solver fixes the fifteen; which eleven start, the bench order and the captain are
+yours. Drag any player onto any other to swap them. Every rule the solver obeyed is
+enforced in `src/lib/squad.ts` rather than in the drag handler, so an illegal side cannot
+be produced by any interaction — a refused drop says why instead of silently snapping back.
+`npm test` covers the swap rules, including an exhaustive check that no permitted swap can
+leave an illegal eleven.
+
 ### The possession term
 
 Defensive contribution opportunity scales with the **opponent's** share of the ball. A
@@ -186,7 +195,8 @@ scripts/make-sample.mjs   synthetic bundle for local development
 scripts/check-model.ts    model regression tests (npm test)
 src/model/                the eight xP components and their distributions
 src/solver/               LP construction, worker, client
-src/lib/                  data loading and projection
+src/lib/                  data loading, projection, squad rules, kit colours
+src/components/Pitch.tsx  the pitch, the shirts and the drag layer
 src/routes/               overview, builder, method
 ```
 

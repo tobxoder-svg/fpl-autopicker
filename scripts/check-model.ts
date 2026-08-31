@@ -9,6 +9,7 @@
  */
 
 import { expectedMinutes, expectedPoints, shrinkRate } from "../src/model/xp.ts";
+import { formationOf, isLegalXi, swap, type SquadState } from "../src/lib/squad.ts";
 import { nbinomSf, poissonFloorDiv } from "../src/model/distributions.ts";
 import type { Player, Position, Team } from "../src/model/types.ts";
 
@@ -156,6 +157,68 @@ console.log("\nscoring sanity");
   const summed = Object.values(all.breakdown).reduce((a, b) => a + b, 0);
   check("the breakdown sums to the total", close(all.xp, summed, 1e-9));
   check("every component is finite", Object.values(all.breakdown).every(Number.isFinite));
+}
+
+console.log("\nsquad rules (what the drag layer is allowed to do)");
+{
+  // ids 1..15: 1 GK + 1 reserve GK, 5 DEF, 5 MID, 3 FWD.
+  const positions: Record<number, Position> = {};
+  const assign = (ids: number[], pos: Position) => ids.forEach((i) => (positions[i] = pos));
+  assign([1, 2], "GK");
+  assign([3, 4, 5, 6, 7], "DEF");
+  assign([8, 9, 10, 11, 12], "MID");
+  assign([13, 14, 15], "FWD");
+  const posOf = (id: number) => positions[id];
+
+  // 4-4-2, with the reserve keeper, a defender, a midfielder and a forward benched.
+  const base: SquadState = {
+    squad: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    xi: [1, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14],
+    bench: [2, 7, 12, 15],
+    captain: 13,
+  };
+
+  check("the starting eleven is legal to begin with", isLegalXi(base.xi, posOf));
+  check("the formation reads correctly", formationOf(base.xi, posOf) === "4-4-2");
+
+  const like = swap(base, 7, 3, posOf); // benched DEF for a starting DEF
+  check("a like-for-like swap is allowed", like.ok);
+  check("it puts the substitute in the eleven", like.next!.xi.includes(7) && !like.next!.xi.includes(3));
+  check("and the starter on the bench", like.next!.bench.includes(3));
+  check("the fifteen are unchanged", like.next!.squad.length === 15);
+
+  const keeper = swap(base, 2, 3, posOf); // reserve keeper for an outfielder
+  check("a keeper cannot replace an outfielder", !keeper.ok);
+  check("and the refusal says why", /keeper/i.test(keeper.reason ?? ""));
+
+  // 3-5-2 has the minimum three defenders; removing one must be refused.
+  const threeAtTheBack: SquadState = {
+    ...base,
+    xi: [1, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14],
+    bench: [2, 6, 7, 15],
+  };
+  check("the three-at-the-back side is legal", isLegalXi(threeAtTheBack.xi, posOf));
+  const breakIt = swap(threeAtTheBack, 15, 3, posOf); // FWD on for the third DEF
+  check("dropping below three defenders is refused", !breakIt.ok);
+  check("and the refusal names the formation", /formation/i.test(breakIt.reason ?? ""));
+
+  const captainMoved = swap(base, 15, 13, posOf); // bench the captain
+  check("benching the captain hands the armband to whoever replaced them", captainMoved.next!.captain === 15);
+
+  const reorder = swap(base, 12, 15, posOf); // reorder two outfield substitutes
+  check("substitutes can be reordered", reorder.ok);
+  check("reordering leaves the eleven alone", reorder.next!.xi.join() === base.xi.join());
+
+  check("a player cannot be swapped with itself", !swap(base, 5, 5, posOf).ok);
+  check(
+    "every swap that is allowed leaves a legal eleven",
+    base.squad.every((a) =>
+      base.squad.every((b) => {
+        const r = swap(base, a, b, posOf);
+        return !r.ok || isLegalXi(r.next!.xi, posOf);
+      }),
+    ),
+  );
 }
 
 console.log(failures === 0 ? "\nall checks passed\n" : `\n${failures} check(s) failed\n`);
