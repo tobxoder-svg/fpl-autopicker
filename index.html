@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fantasy Drafter — FPL squad optimiser</title>
+    <meta
+      name="description"
+      content="A multi-gameweek Fantasy Premier League squad optimiser. Open expected-points model, mixed-integer solver running in your browser, no account required."
+    />
+    <meta name="theme-color" content="#0089b0" />
+    <meta property="og:title" content="Fantasy Drafter" />
+    <meta
+      property="og:description"
+      content="An FPL squad optimiser with an open expected-points model and a solver that runs in your browser."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230089b0'/%3E%3Cpath d='M8 22V10h3.4v9.2H17V22H8Zm11.6 0V10H24v12h-4.4Z' fill='%23fff'/%3E%3C/svg%3E"
+    />
+    <script>
+      // Applied before first paint so a chosen theme never flashes the other one.
+      (function () {
+        try {
+          var t = localStorage.getItem("fd-theme");
+          if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+        } catch (e) {
+          /* private mode — fall through to the OS preference */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.vite/
+# copied from node_modules at build time
+public/highs.wasm
+
+# typescript build info
+*.tsbuildinfo

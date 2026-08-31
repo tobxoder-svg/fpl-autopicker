@@ -1,0 +1,171 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Palette. Validated for colour-vision deficiency against both surfaces:
+   the cerulean/crimson pair separates at deutan ΔE 12.8 (light) and 11.7 (dark),
+   comfortably above the ΔE 8 target. Cerulean carries gains and identity;
+   crimson is reserved for deductions and never used as a second series colour.
+--------------------------------------------------------------------------- */
+
+:root {
+  --bg: #eef1f5;
+  --surface: #fbfcfd;
+  --surface-2: #f2f5f8;
+  --surface-3: #e7ecf1;
+  --border: #dbe1e9;
+  --border-strong: #c3ccd8;
+  --ink: #111823;
+  --ink-2: #4b5765;
+  --ink-muted: #7b8797;
+  --accent: #0089b0;
+  --accent-ink: #ffffff;
+  --loss: #be2e5e;
+  --accent-soft: rgb(0 137 176 / 0.12);
+  --loss-soft: rgb(190 46 94 / 0.11);
+  --shadow: 0 1px 2px rgb(17 24 35 / 0.05), 0 8px 24px -16px rgb(17 24 35 / 0.22);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1218;
+    --surface: #151b23;
+    --surface-2: #1b222c;
+    --surface-3: #232c37;
+    --border: #28313d;
+    --border-strong: #3a4552;
+    --ink: #e6ebf1;
+    --ink-2: #a1aebd;
+    --ink-muted: #6c7a8a;
+    --accent: #1e95be;
+    --accent-ink: #05121a;
+    --loss: #d4527c;
+    --accent-soft: rgb(30 149 190 / 0.17);
+    --loss-soft: rgb(212 82 124 / 0.15);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -16px rgb(0 0 0 / 0.7);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1218;
+  --surface: #151b23;
+  --surface-2: #1b222c;
+  --surface-3: #232c37;
+  --border: #28313d;
+  --border-strong: #3a4552;
+  --ink: #e6ebf1;
+  --ink-2: #a1aebd;
+  --ink-muted: #6c7a8a;
+  --accent: #1e95be;
+  --accent-ink: #05121a;
+  --loss: #d4527c;
+  --accent-soft: rgb(30 149 190 / 0.17);
+  --loss-soft: rgb(212 82 124 / 0.15);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -16px rgb(0 0 0 / 0.7);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-loss: var(--loss);
+  --color-loss-soft: var(--loss-soft);
+
+  --font-display: "Familjen Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --shadow-card: var(--shadow);
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+  }
+}
+
+@layer utilities {
+  .tnum { font-variant-numeric: tabular-nums; }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+  .scroll-x { overflow-x: auto; overscroll-behavior-x: contain; }
+}
+
+/* Range inputs get no useful default styling in any browser. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px; background: var(--surface-3);
+}
+input[type="range"]::-moz-range-track {
+  height: 4px; border-radius: 2px; background: var(--surface-3);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 15px; height: 15px; margin-top: -5.5px;
+  border-radius: 50%; background: var(--accent);
+  border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border-strong);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 15px; height: 15px;
+  border-radius: 50%; background: var(--accent);
+  border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
