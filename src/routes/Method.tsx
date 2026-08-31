@@ -6,12 +6,12 @@ const COMPONENTS = [
   {
     name: "Expected minutes",
     formula: "2·P(60′) + 1·(P(appear) − P(60′))",
-    body: "The multiplier on every term below, and the highest-leverage part of the whole model. Start rate is regressed toward a squad-player prior so one start out of one appearance does not read as nailed, then scaled by the API's availability flag.",
+    body: "The multiplier on every term below, and the highest-leverage part of the whole model. Start rate and minute share are measured against the club's matches played, not the player's own appearances — one start in one appearance is not a nailed starter — then regressed toward a prior and scaled by the availability flag.",
   },
   {
     name: "Attacking returns",
     formula: "xG·goal_pts + xA·3",
-    body: "Non-penalty xG and xA per 90, adjusted by team attack × opponent defence × venue. Penalty share is added separately at a 79% conversion rate, because it is persistent and public models tend to bury it inside the xG total.",
+    body: "xG and xA per 90, adjusted by team attack × opponent defence × venue. Both rates are regressed toward a positional prior by sample size — see below, because that regression is load-bearing.",
   },
   {
     name: "Clean sheet",
@@ -36,7 +36,7 @@ const COMPONENTS = [
   {
     name: "Bonus",
     formula: "shrunk positional prior",
-    body: "The weakest term, deliberately. See the caveat below.",
+    body: "The weakest term, deliberately. See the caveats below.",
     weak: true,
   },
   {
@@ -80,6 +80,7 @@ export default function Method() {
         ))}
       </section>
 
+      <SmallSamples />
       <PossessionSection />
 
       <section className="mt-12 border-t border-line pt-10 grid lg:grid-cols-2 gap-8">
@@ -121,6 +122,57 @@ export default function Method() {
 
       <Caveats />
     </div>
+  );
+}
+
+function SmallSamples() {
+  return (
+    <section className="mt-12 border-t border-line pt-10">
+      <h2 className="font-display text-[clamp(20px,2.8vw,28px)] font-bold tracking-tight max-w-[26ch]">
+        Why every rate is dragged back toward the average
+      </h2>
+      <div className="mt-4 grid lg:grid-cols-2 gap-8 items-start">
+        <div>
+          <p className="text-[14px] text-ink-2 leading-relaxed">
+            Each per-90 rate is regressed toward a positional prior, weighted by minutes
+            played — 450 minutes of prior against however much the player has actually given
+            you. Without it, small samples become the model's favourite players.
+          </p>
+          <p className="mt-3 text-[14px] text-ink-2 leading-relaxed">
+            This is not hypothetical. On the first run against live data, a midfielder who had
+            played <b className="text-ink font-semibold">one minute</b> projected 128 points
+            over five gameweeks — roughly six times Haaland — because three touches
+            extrapolated to 96 defensive actions per 90. Regressing start probability alone
+            does not fix it; the rates themselves have to be regressed, or the optimiser goes
+            looking for exactly these artefacts and builds a squad out of them.
+          </p>
+        </div>
+        <Card className="p-4">
+          <div className="eyebrow mb-3">The same player, before and after</div>
+          <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-2 items-baseline text-[13px]">
+            <div className="text-ink-muted text-[11.5px] uppercase tracking-wider font-mono">Metric</div>
+            <div className="text-loss text-[11.5px] uppercase tracking-wider font-mono text-right">Raw</div>
+            <div className="text-accent text-[11.5px] uppercase tracking-wider font-mono text-right">Shrunk</div>
+            {[
+              ["Minutes played", "1", "1"],
+              ["Defensive actions / 90", "96.0", "5.2"],
+              ["P(DEFCON) next GW", "85%", "0%"],
+              ["xP over 5 GW", "128.6", "4.8"],
+            ].map(([k, a, c]) => (
+              <div key={k} className="contents">
+                <div className="text-ink-2">{k}</div>
+                <div className="font-mono tnum text-right text-loss">{a}</div>
+                <div className="font-mono tnum text-right text-accent">{c}</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11.5px] text-ink-muted mt-3 leading-snug">
+            Pinned as a regression test — the model suite fails if a one-minute substitute can
+            out-project a regular starter again.
+          </p>
+        </Card>
+      </div>
+    </section>
   );
 }
 
@@ -242,7 +294,15 @@ const CAVEATS = [
   },
   {
     title: "Possession is derived, not measured",
-    body: "The FPL API does not publish possession. It is inferred here from how many defensive actions a club's players accumulate per 90 relative to the league, blended toward a team-strength prior while sample sizes are small. It is directionally right and it is still a proxy. Wiring in a real feed is the single highest-value data upgrade available.",
+    body: "The FPL API does not publish possession. It is inferred from how many defensive actions a club's players accumulate per 90 relative to the league, blended toward a fixture-difficulty prior while sample sizes are small. Checked against live data it ranks Manchester City, Arsenal and Chelsea highest and Hull, Ipswich and Leeds lowest — right, and still a proxy. Wiring in a real feed is the single highest-value data upgrade available.",
+  },
+  {
+    title: "Attacking returns include penalties",
+    body: "The API reports total expected goals, not non-penalty expected goals, and exposes no penalties-scored figure to net them out. The separate penalty term is therefore held at zero — adding it would count every penalty taker twice. The cost is that a newly appointed taker gets no credit until they have actually taken one.",
+  },
+  {
+    title: "Team strength is reconstructed",
+    body: "Every strength field the API publishes for clubs is zero, and the overall strength value is null — they are simply not populated. Attack and defence ratings are rebuilt from fixture difficulty, which is populated, blended with observed expected goals for and against as the season accumulates. It works, but it is a reconstruction of something the API is supposed to provide directly.",
   },
   {
     title: "Transfers are not planned",

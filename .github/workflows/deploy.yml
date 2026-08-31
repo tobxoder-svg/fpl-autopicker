@@ -29,11 +29,12 @@ jobs:
 
       - run: npm ci
 
-      # If no snapshot has been committed yet, fall back to the synthetic bundle
-      # so the first deploy is a working site rather than an error state.
-      - name: Ensure a data bundle exists
-        run: test -f public/data/bundle.json || node scripts/make-sample.mjs
+      # Model regression tests. Cheap, and they pin the small-sample bug that a
+      # one-minute substitute can out-project a regular starter.
+      - run: npm test
 
+      # `prebuild` snapshots the live API and falls back to the committed bundle
+      # if the API is unreachable, so a build never fails on a bad API minute.
       - run: npm run build
         env:
           # Repository page served from https://<user>.github.io/<repo>/.

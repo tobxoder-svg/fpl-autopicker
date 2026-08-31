@@ -28,6 +28,8 @@ jobs:
           node-version: 22
 
       - name: Snapshot the FPL API
+        # fetch-fpl.mjs asserts on the result and exits non-zero rather than
+        # committing a bundle that would render every projection NaN.
         run: node scripts/fetch-fpl.mjs
 
       - name: Commit if anything changed

@@ -12,7 +12,7 @@
  * rather than a fit on last season's data.
  */
 
-import { nbinomSf, nbinomVar, poissonFloorDiv } from "./distributions";
+import { nbinomSf, poissonFloorDiv } from "./distributions";
 import type { Player, Position, Team, TeamFixture, XpResult } from "./types";
 
 export const GOAL_POINTS: Record<Position, number> = { GK: 10, DEF: 6, MID: 5, FWD: 4 };
@@ -27,6 +27,46 @@ const LEAGUE_PENS = 0.11;
 const HOME_ATTACK = 1.09;
 const AWAY_ATTACK = 0.91;
 const DEFCON_DISPERSION = 6.5;
+
+/**
+ * Positional priors for the per-90 rates, and the number of minutes of evidence
+ * it takes for a player's own record to outweigh them.
+ *
+ * This is not decoration. A player with 15 minutes who happened to make three
+ * tackles reads as 18 defensive actions per 90 — and, unshrunk, projects as the
+ * best asset in the game. Regressing the start probability is not enough; the
+ * rates themselves have to be regressed too, or every small sample becomes an
+ * outlier the optimiser then goes hunting for.
+ */
+const RATE_PRIOR: Record<"npxg90" | "xa90" | "defcon90" | "saves90", Record<Position, number>> = {
+  npxg90: { GK: 0.0, DEF: 0.05, MID: 0.12, FWD: 0.3 },
+  xa90: { GK: 0.01, DEF: 0.07, MID: 0.14, FWD: 0.11 },
+  defcon90: { GK: 0, DEF: 7.5, MID: 5.0, FWD: 2.2 },
+  saves90: { GK: 2.9, DEF: 0, MID: 0, FWD: 0 },
+};
+const PRIOR_MINUTES = 450;
+
+/** Shrinks an observed per-90 rate toward its positional prior by sample size. */
+export function shrinkRate(observed: number, prior: number, minutes: number): number {
+  return (observed * minutes + prior * PRIOR_MINUTES) / (minutes + PRIOR_MINUTES);
+}
+
+export interface ShrunkRates {
+  npxg90: number;
+  xa90: number;
+  defcon90: number;
+  saves90: number;
+}
+
+export function shrunkRates(p: Player): ShrunkRates {
+  const m = Math.max(0, p.minutes);
+  return {
+    npxg90: shrinkRate(p.npxg90, RATE_PRIOR.npxg90[p.pos], m),
+    xa90: shrinkRate(p.xa90, RATE_PRIOR.xa90[p.pos], m),
+    defcon90: shrinkRate(p.defcon90, RATE_PRIOR.defcon90[p.pos], m),
+    saves90: shrinkRate(p.saves90, RATE_PRIOR.saves90[p.pos], m),
+  };
+}
 
 /** Bonus priors by position, shrunk hard — see the note at the top of the file. */
 const BONUS_PRIOR: Record<Position, number> = { GK: 0.22, DEF: 0.26, MID: 0.2, FWD: 0.18 };
@@ -49,10 +89,12 @@ export interface MinutesResult {
  * it. A flawless attacking model on a player who lasts 55 minutes is still a
  * bad projection.
  */
-export function expectedMinutes(p: Player): MinutesResult {
-  const games = Math.max(1, p.appearances);
-  const startRate = clamp(p.starts / games, 0, 1);
-  const cameoRate = clamp((p.appearances - p.starts) / games, 0, 1);
+export function expectedMinutes(p: Player, team: Team): MinutesResult {
+  // The club's matches played is the honest denominator. A player's own
+  // appearance count is not: one start in one appearance is not a nailed starter.
+  // Defaults to 2 for a bundle written before this field existed, so an old
+  // snapshot degrades rather than turning every projection into NaN.
+  const teamMatches = Math.max(1, Number.isFinite(team.matchesPlayed) ? team.matchesPlayed : 2);
 
   // Availability multiplier from the API's own injury flag.
   const avail =
@@ -64,14 +106,25 @@ export function expectedMinutes(p: Player): MinutesResult {
           : 0.5
         : p.chanceOfPlaying / 100;
 
-  // Regress thin samples toward a squad-player prior rather than trusting one
-  // start out of one appearance.
-  const weight = games / (games + 3);
-  const pStart = clamp((startRate * weight + 0.45 * (1 - weight)) * avail, 0, 1);
-  const pCameo = clamp(cameoRate * weight * avail, 0, 1 - pStart);
+  // Regress toward a squad-player prior, with the club's matches as evidence.
+  // Starts are a far lower-variance signal than the per-90 rates above, so this
+  // prior is deliberately lighter: after two matches a player who started both
+  // should read as a probable starter, not as a coin flip.
+  const w = teamMatches / (teamMatches + 1.5);
+  const startRate = clamp(p.starts / teamMatches, 0, 1);
+  const minuteShare = clamp(p.minutes / (teamMatches * 90), 0, 1);
 
-  // Minutes per start, from observed data where there is enough of it.
-  const minsPerStart = p.starts > 0 ? clamp(p.minutes / p.starts, 45, 90) : 78;
+  // Two views of the same thing — how often they start, and how much of the
+  // available football they actually play. Averaging them keeps a regular
+  // substitute from being read as a starter.
+  const evidence = (startRate + minuteShare) / 2;
+  const pStart = clamp((evidence * w + 0.45 * (1 - w)) * avail, 0, 1);
+
+  const appearanceRate = clamp((p.appearances - p.starts) / teamMatches, 0, 1);
+  const pCameo = clamp(appearanceRate * w * avail, 0, Math.max(0, 1 - pStart));
+
+  // Minutes per start, from observed data once there is enough of it.
+  const minsPerStart = p.starts >= 2 ? clamp(p.minutes / p.starts, 45, 90) : 74;
   const p60GivenStart = clamp((minsPerStart - 40) / 45, 0.3, 0.97);
 
   const p60 = pStart * p60GivenStart;
@@ -100,9 +153,9 @@ function lambdaConceded(team: Team, opponent: Team, home: boolean): number {
  * possession-dominant club. This term is where most public models leave points
  * on the table.
  */
-export function defconMean(p: Player, team: Team, minutesScale: number): number {
+export function defconMean(rate: number, team: Team, minutesScale: number): number {
   const opponentPossession = 1 - team.possession;
-  return p.defcon90 * Math.pow(opponentPossession / 0.5, 0.6) * minutesScale;
+  return rate * Math.pow(opponentPossession / 0.5, 0.6) * minutesScale;
 }
 
 export function expectedPoints(
@@ -111,14 +164,15 @@ export function expectedPoints(
   opponent: Team,
   home: boolean,
 ): XpResult {
-  const mins = expectedMinutes(p);
+  const mins = expectedMinutes(p, team);
   const scale = mins.xmins / 90;
+  const rates = shrunkRates(p);
 
   // 2 — attacking returns
   const mult = attackMultiplier(team, opponent, home);
   const pens = p.penShare * LEAGUE_PENS * team.attack * scale;
-  const xg = p.npxg90 * mult * scale + pens * PEN_CONVERSION;
-  const xa = p.xa90 * mult * scale;
+  const xg = rates.npxg90 * mult * scale + pens * PEN_CONVERSION;
+  const xa = rates.xa90 * mult * scale;
   const attacking = xg * GOAL_POINTS[p.pos] + xa * ASSIST_POINTS;
 
   // 3 — clean sheet (requires 60+ minutes)
@@ -136,15 +190,15 @@ export function expectedPoints(
   // 5 — defensive contribution
   let expActions = 0;
   let pDefcon = 0;
-  if (p.pos !== "GK" && p.defcon90 > 0) {
-    expActions = defconMean(p, team, scale);
+  if (p.pos !== "GK" && rates.defcon90 > 0) {
+    expActions = defconMean(rates.defcon90, team, scale);
     pDefcon = nbinomSf(DEFCON_THRESHOLD[p.pos], expActions, DEFCON_DISPERSION);
   }
   const defcon = pDefcon * DEFCON_POINTS;
 
   // 6 — saves, 1 per 3
   const saves =
-    p.pos === "GK" ? poissonFloorDiv(p.saves90 * opponent.attack * scale, 3) : 0;
+    p.pos === "GK" ? poissonFloorDiv(rates.saves90 * opponent.attack * scale, 3) : 0;
 
   const base = mins.points + attacking + cleanSheet + conceded + defcon + saves;
 
@@ -180,7 +234,7 @@ export function pointsStdDev(p: Player, r: XpResult): number {
   const goalVar = Math.pow(GOAL_POINTS[p.pos], 2) * (r.breakdown.attacking > 0 ? r.xmins / 90 : 0) * 0.35;
   const csVar = Math.pow(CS_POINTS[p.pos], 2) * r.pCleanSheet * (1 - r.pCleanSheet);
   const dcVar = Math.pow(DEFCON_POINTS, 2) * r.pDefcon * (1 - r.pDefcon);
-  const actionVar = p.defcon90 > 0 ? nbinomVar(r.expActions, 6.5) * 0 : 0; // held for a future fit
+  const actionVar = 0; // negative-binomial action variance, held for a future fit
   return Math.sqrt(Math.max(0, goalVar + csVar + dcVar + actionVar));
 }
 

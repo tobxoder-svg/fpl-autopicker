@@ -11,10 +11,16 @@ export interface Team {
   defence: number;
   /**
    * Share of the ball, 0-1. The FPL API does not publish possession, so this is
-   * derived — see `derivePossession` in scripts/fetch-fpl.mjs. Swap in a real
-   * feed (FBref, Opta) and every DEFCON projection improves at once.
+   * derived — see `teamRatings` in scripts/fetch-fpl.mjs. Swap in a real feed
+   * (FBref, Opta) and every DEFCON projection improves at once.
    */
   possession: number;
+  /**
+   * Matches this club has played. The denominator for start rate and minute
+   * share — dividing by a player's own appearances instead makes one start out
+   * of one appearance look nailed on.
+   */
+  matchesPlayed: number;
 }
 
 /** One player, with the per-90 rates the eight components consume. */
@@ -41,7 +47,14 @@ export interface Player {
   yellow90: number;
   red90: number;
 
+  /**
+   * Held at 0 against the live API: `expected_goals` already includes penalty
+   * xG and there is no `penalties_scored` field to net it out, so a separate
+   * penalty term would double-count every taker.
+   */
   penShare: number;
+  /** Display only. 1 = first-choice penalty taker. */
+  penaltiesOrder?: number | null;
   /** Season-to-date FPL points — used only for display and sanity checks. */
   totalPoints: number;
 }

@@ -34,7 +34,12 @@ function clubProfile(i) {
   const attack = [1.42, 1.2, 1.0, 0.8][tier] + (rnd() - 0.5) * 0.08;
   const defence = [0.66, 0.86, 1.0, 1.2][tier] + (rnd() - 0.5) * 0.08;
   const possession = [0.61, 0.55, 0.49, 0.39][tier] + (rnd() - 0.5) * 0.04;
-  return { attack: round(attack), defence: round(defence), possession: round(possession) };
+  return {
+    attack: round(attack),
+    defence: round(defence),
+    possession: round(possession),
+    matchesPlayed: 3,
+  };
 }
 
 function makePlayer(id, team, pos, tier) {
@@ -83,7 +88,9 @@ function makePlayer(id, team, pos, tier) {
     saves90: round(saves90),
     yellow90: round(0.05 + rnd() * 0.22),
     red90: round(rnd() * 0.012),
-    penShare: pos !== "GK" && rnd() > 0.93 ? 0.85 : 0,
+    // Held at 0 to match the live bundle, where xG already includes penalties.
+    penShare: 0,
+    penaltiesOrder: pos !== "GK" && rnd() > 0.93 ? 1 : null,
     totalPoints: Math.round((minutes / 90) * (1.5 + eliteness * 4)),
   };
 }
