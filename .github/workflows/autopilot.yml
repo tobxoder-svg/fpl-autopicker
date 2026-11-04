@@ -1,0 +1,119 @@
+# FPL autopilot — fully automatic weekly transfers (no confirmation).
+#
+# Runs every hour. It only acts between 12h and 1h before each FPL deadline,
+# at most once per gameweek, and follows the owner's rules in
+# scripts/autopick.ts: no points hits ever, a transfer only if it raises
+# expected points, and the most money left among near-best options.
+#
+# ONE-TIME SETUP (repo → Settings → Secrets and variables → Actions):
+#   Secrets:
+#     FPL_REFRESH_TOKEN  your FPL login token, copied from the browser
+#                        (see the steps in the chat / README)
+#     AUTOPILOT_PAT      a fine-grained GitHub token for THIS repo with
+#                        "Secrets: Read and write" + "Variables: Read and write".
+#                        FPL's login token changes every run; this lets the job
+#                        save the new one. Without it the job locks itself out.
+#     NOTIFY_WEBHOOK     optional: https://ntfy.sh/<your-topic> for phone alerts
+#     FPL_ENTRY_ID       optional: your team ID (saves one lookup)
+#   Variables:
+#     AUTOPILOT_MODE     "live" to submit. Anything else (or unset) = dry run.
+#     Optional tuning: MIN_GAIN_PER_TRANSFER (default 1.0),
+#     BANK_TOLERANCE_XP (default 2), WINDOW_MAX_H (default 12, max 12).
+#   Managed by the job itself (don't edit): AUTOPILOT_DONE_EVENT, AUTOPILOT_LAST_HASH.
+#
+# Also: Settings → Actions → General → Workflow permissions → "Read and write",
+# so the twice-daily data refresh can commit. Those commits keep this schedule
+# alive (GitHub disables schedules in repos with no commits for 60 days).
+#
+# A failed run means: exit 1 = something was blocked or didn't confirm (check
+# your team in the FPL app); exit 2 = the FPL login token is dead (re-copy it).
+# GitHub emails you on failure.
+
+name: FPL autopilot
+
+on:
+  schedule:
+    - cron: "7 * * * *"   # hourly
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: "Dry-run preview now, ignoring the deadline window (never submits)"
+        type: boolean
+        default: true
+
+# Never two runs at once: they'd race the same login token and the same submit.
+concurrency:
+  group: fpl-autopilot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  autopick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Plan and submit
+        id: run
+        env:
+          FPL_REFRESH_TOKEN: ${{ secrets.FPL_REFRESH_TOKEN }}
+          FPL_ENTRY_ID: ${{ secrets.FPL_ENTRY_ID }}
+          NOTIFY_WEBHOOK: ${{ secrets.NOTIFY_WEBHOOK }}
+          # A manual "preview" run is always a dry run.
+          AUTOPILOT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.preview && 'dry-run' || vars.AUTOPILOT_MODE }}
+          MIN_GAIN_PER_TRANSFER: ${{ vars.MIN_GAIN_PER_TRANSFER }}
+          BANK_TOLERANCE_XP: ${{ vars.BANK_TOLERANCE_XP }}
+          WINDOW_MAX_H: ${{ vars.WINDOW_MAX_H }}
+          AUTOPILOT_DONE_EVENT: ${{ vars.AUTOPILOT_DONE_EVENT }}
+          AUTOPILOT_LAST_HASH: ${{ vars.AUTOPILOT_LAST_HASH }}
+          AUTOPILOT_ROTATED_TOKEN_FILE: ${{ runner.temp }}/rotated
+          AUTOPILOT_HASH_FILE: ${{ runner.temp }}/hash
+          AUTOPILOT_DONE_FILE: ${{ runner.temp }}/done
+        run: |
+          set +e
+          npx tsx scripts/autopick.ts \
+            --state "$RUNNER_TEMP/state.json" \
+            --out "$RUNNER_TEMP/out" \
+            ${{ github.event_name == 'workflow_dispatch' && inputs.preview && '--force' || '' }}
+          code=$?
+          # 75 = FPL is mid-update or unreachable: retry next hour, not a failure.
+          if [ "$code" -eq 75 ]; then exit 0; fi
+          exit $code
+
+      # Always runs, even after a failure: FPL rotates the login token on every
+      # use, and "transfers done" must be remembered or a retry could repeat them.
+      - name: Save rotated token and progress
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.AUTOPILOT_PAT }}
+        run: |
+          R="$GITHUB_REPOSITORY"
+          if [ -s "$RUNNER_TEMP/rotated" ]; then
+            gh secret set FPL_REFRESH_TOKEN --repo "$R" < "$RUNNER_TEMP/rotated" && echo "Login token rotated and saved."
+          fi
+          if [ -s "$RUNNER_TEMP/done" ]; then
+            gh variable set AUTOPILOT_DONE_EVENT --repo "$R" --body "$(cat "$RUNNER_TEMP/done")" && echo "Progress: $(cat "$RUNNER_TEMP/done")"
+          fi
+          if [ -s "$RUNNER_TEMP/hash" ]; then
+            gh variable set AUTOPILOT_LAST_HASH --repo "$R" --body "$(cat "$RUNNER_TEMP/hash")"
+          fi
+          rm -f "$RUNNER_TEMP/rotated" "$RUNNER_TEMP/state.json"
+
+      - name: Keep the plan and request bodies
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autopick-${{ github.run_id }}
+          path: ${{ runner.temp }}/out
+          if-no-files-found: ignore
+          retention-days: 30

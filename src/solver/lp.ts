@@ -50,6 +50,12 @@ export interface SolveParams {
    * minKept = 15 - k gives the best squad reachable in at most k transfers.
    */
   keep?: { ids: number[]; minKept: number };
+  /**
+   * Money mode (used by the weekly autopilot): keep the squad's expected-points
+   * objective at or above `minObjective`, and among squads that clear it,
+   * minimise total spend — i.e. leave the most money in the bank.
+   */
+  money?: { minObjective: number };
 }
 
 export const SQUAD_SHAPE: Record<Position, number> = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
@@ -173,6 +179,24 @@ export function buildSquadLp(
 
   const bins: string[] = [];
   for (let i = 0; i < n; i++) bins.push(`x${i}`, `y${i}`, `c${i}`);
+
+  // Money mode: the xP objective becomes a floor, and spend is minimised.
+  if (params.money) {
+    cons.push(`xpfloor: ${terms(obj)} >= ${r5(params.money.minObjective)}`);
+    const spend = candidates.map((c, i) => [c.cost, `x${i}`] as [number, string]);
+    return [
+      "Minimize",
+      ` spend: ${terms(spend)}`,
+      "Subject To",
+      ...cons.map((c) => ` ${c}`),
+      "Bounds",
+      " zero = 0",
+      "Binary",
+      ` ${bins.join(" ")}`,
+      "End",
+      "",
+    ].join("\n");
+  }
 
   return [
     "Maximize",

@@ -16,7 +16,7 @@ interface Proposal {
   generatedAt: string;
   event: number;
   deadline: string;
-  verdict: "READY" | "NEEDS REVIEW" | "BLOCKED";
+  verdict: "EXECUTED" | "READY" | "NEEDS REVIEW" | "BLOCKED";
   transfers: Array<{ pos: string; out: Who & { price: number }; in: Who & { price: number } }>;
   bankAfter: number;
   freeTransfers: number | null;
@@ -49,6 +49,7 @@ function untilDeadline(iso: string, now: number): string {
 }
 
 const VERDICT_COPY: Record<Proposal["verdict"], string> = {
+  EXECUTED: "Submitted to FPL and confirmed on your team.",
   READY: "Every rule and guardrail passes.",
   "NEEDS REVIEW": "Legal, but something deserves a look before the deadline.",
   BLOCKED: "Breaks a rule or one of your guardrails — fix the plan before the deadline.",
@@ -80,8 +81,9 @@ export default function Autopilot() {
       <div className="mb-5">
         <h1 className="font-display text-[clamp(24px,3.5vw,32px)] font-bold tracking-tight">Autopilot</h1>
         <p className="text-[13.5px] text-ink-2 mt-1 max-w-[62ch]">
-          The latest proposal from the scheduled runner, checked against your real selling prices,
-          free transfers and chips. Propose-only: nothing is ever sent to your FPL account.
+          What the autopilot did this gameweek. It runs by itself in the 12 hours before each
+          deadline and submits without asking: free transfers only (never a points hit), only when
+          they raise expected points, and the most money left among near-best options.
         </p>
       </div>
 
@@ -93,7 +95,7 @@ export default function Autopilot() {
       <Card className="p-4 mt-5">
         <h2 className="font-display font-semibold text-[15px] mb-1">Alerts on this phone</h2>
         <p className="text-[12.5px] text-ink-2">
-          Each new proposal is posted to the <span className="font-mono">NOTIFY_WEBHOOK</span> secret. For
+          Each run's result is posted to the <span className="font-mono">NOTIFY_WEBHOOK</span> secret. For
           a push notification, install <b className="font-semibold">ntfy</b> from the Play Store, subscribe
           to a hard-to-guess topic, and set the secret to <span className="font-mono">https://ntfy.sh/&lt;topic&gt;</span>.
           Tapping the alert brings you back here.
@@ -106,20 +108,19 @@ export default function Autopilot() {
 function NoProposal() {
   return (
     <Card className="p-5">
-      <h2 className="font-display font-semibold text-[16px] mb-2">No proposal published yet</h2>
+      <h2 className="font-display font-semibold text-[16px] mb-2">Nothing published yet</h2>
       <ol className="list-decimal pl-5 grid gap-1.5 text-[13px] text-ink-2">
-        <li>
-          On <b className="font-semibold text-ink">My team</b>, pick an option and download{" "}
-          <span className="font-mono">plan.json</span>; commit it as <span className="font-mono">autopilot/plan.json</span>.
-        </li>
         <li>
           Add the <span className="font-mono">FPL_REFRESH_TOKEN</span> and <span className="font-mono">AUTOPILOT_PAT</span> secrets
           (setup notes are at the top of <span className="font-mono">.github/workflows/autopilot.yml</span>).
         </li>
         <li>
-          Set the repository variable <span className="font-mono">AUTOPILOT_PUBLISH</span> to{" "}
-          <span className="font-mono">true</span>. The first run inside the 8-hour window before a
-          deadline publishes here.
+          Set the repository variable <span className="font-mono">AUTOPILOT_MODE</span> to{" "}
+          <span className="font-mono">live</span>. Until then it only does dry runs and changes nothing.
+        </li>
+        <li>
+          To see results here, also set <span className="font-mono">AUTOPILOT_PUBLISH</span> to{" "}
+          <span className="font-mono">true</span>. Each gameweek's result appears after it runs.
         </li>
       </ol>
     </Card>
@@ -128,7 +129,7 @@ function NoProposal() {
 
 function ProposalView({ p, now }: { p: Proposal; now: number }) {
   const passed = Date.parse(p.deadline) <= now;
-  const tone = p.verdict === "BLOCKED" ? "loss" : p.verdict === "READY" ? "accent" : "neutral";
+  const tone = p.verdict === "BLOCKED" ? "loss" : p.verdict === "READY" || p.verdict === "EXECUTED" ? "accent" : "neutral";
   const icon = { ok: "✓", warn: "!", fail: "✕" } as const;
   const iconTone = { ok: "text-accent", warn: "text-ink", fail: "text-loss" } as const;
   const lu = p.lineup;

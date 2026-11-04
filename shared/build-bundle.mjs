@@ -183,7 +183,16 @@ function assertSane(teams, players) {
  * @returns DataBundle (see src/model/types.ts); throws if the result would
  *          render every projection NaN.
  */
-export function buildBundle(boot, fixturesRaw, { generatedAt = new Date().toISOString() } = {}) {
+export function buildBundle(
+  boot,
+  fixturesRaw,
+  { generatedAt = new Date().toISOString(), includeIds = [] } = {},
+) {
+  // Players with no minutes who aren't available are normally dropped. The
+  // autopilot passes the user's own squad here so an injured, never-played
+  // squad member still exists in the pool — otherwise selling him would look
+  // "free" and could force more transfers than there are free transfers.
+  const keepIds = new Set(includeIds);
   const ratings = teamRatings(boot.teams, boot.elements, fixturesRaw);
   const teams = boot.teams.map((t) => ({
     id: t.id,
@@ -193,7 +202,7 @@ export function buildBundle(boot, fixturesRaw, { generatedAt = new Date().toISOS
   }));
 
   const players = boot.elements
-    .filter((el) => num(el.minutes) > 0 || el.status === "a")
+    .filter((el) => num(el.minutes) > 0 || el.status === "a" || keepIds.has(el.id))
     .map((el) => {
       const minutes = num(el.minutes);
       const starts = num(el.starts);

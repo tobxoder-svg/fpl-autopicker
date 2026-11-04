@@ -86,6 +86,9 @@ const FREE_TRANSFER_CHIPS = new Set(["wildcard", "freehit"]);
 const EXIT = { OK: 0, ERROR: 1, AUTH: 2, TEMPORARY: 75 };
 
 const { values: args } = parseArgs({
+  // Not strict: scripts/autopick.ts imports this module, and its own flags
+  // must not be rejected here.
+  strict: false,
   options: {
     plan: { type: "string" },
     state: { type: "string", default: ".autopilot/state.json" },
@@ -101,8 +104,8 @@ const { values: args } = parseArgs({
   },
 });
 
-class AuthError extends Error {}
-class TemporaryError extends Error {}
+export class AuthError extends Error {}
+export class TemporaryError extends Error {}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -121,7 +124,7 @@ async function readJson(path) {
 }
 
 /** Write via temp + rename so a crash mid-write never leaves half a token. */
-async function writeSecretJson(path, data) {
+export async function writeSecretJson(path, data) {
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.tmp`;
   await writeFile(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
@@ -278,7 +281,7 @@ export function normaliseMyTeam(raw) {
     available: (c.status_for_entry ?? c.status) === "available",
   }));
 
-  return { picks, bank: t.bank ?? 0, freeTransfers, unlimited, chips };
+  return { picks, bank: t.bank ?? 0, freeTransfers, unlimited, made: t.made ?? 0, chips };
 }
 
 async function loadCurrentSquad(state, statePath) {
@@ -542,7 +545,7 @@ export function toProposal(dl, d) {
   };
 }
 
-async function notify(markdown, verdict) {
+export async function notify(markdown, verdict) {
   const url = process.env.NOTIFY_WEBHOOK;
   if (!url) return;
   let init;

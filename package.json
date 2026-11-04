@@ -14,7 +14,8 @@
     "prebuild": "node scripts/copy-wasm.mjs && node scripts/prepare-data.mjs",
     "sample:data": "node scripts/make-sample.mjs",
     "test": "tsx scripts/check-model.ts",
-    "autopilot": "node scripts/autopilot.mjs --plan autopilot/plan.json"
+    "autopilot": "node scripts/autopilot.mjs --plan autopilot/plan.json",
+    "autopick": "tsx scripts/autopick.ts"
   },
   "dependencies": {
     "highs": "^1.15.2",

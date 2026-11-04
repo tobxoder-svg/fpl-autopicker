@@ -1,0 +1,198 @@
+diff --git a/index.html b/index.html
+index f37d39e..02cbb7f 100644
+--- a/index.html
++++ b/index.html
+@@ -8,7 +8,8 @@
+       name="description"
+       content="A multi-gameweek Fantasy Premier League squad optimiser. Open expected-points model, mixed-integer solver running in your browser, no account required."
+     />
+-    <meta name="theme-color" content="#0089b0" />
++    <meta name="theme-color" content="#efeeea" media="(prefers-color-scheme: light)" />
++    <meta name="theme-color" content="#1b2027" media="(prefers-color-scheme: dark)" />
+     <meta property="og:title" content="Fantasy Drafter" />
+     <meta
+       property="og:description"
+@@ -23,7 +24,7 @@
+     />
+     <link
+       rel="icon"
+-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230089b0'/%3E%3Cpath d='M8 22V10h3.4v9.2H17V22H8Zm11.6 0V10H24v12h-4.4Z' fill='%23fff'/%3E%3C/svg%3E"
++      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23344a5f'/%3E%3Cpath d='M8 22V10h3.4v9.2H17V22H8Zm11.6 0V10H24v12h-4.4Z' fill='%23fff'/%3E%3C/svg%3E"
+     />
+     <script>
+       // Applied before first paint so a chosen theme never flashes the other one.
+diff --git a/src/index.css b/src/index.css
+index b778536..fa8cfbb 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -1,78 +1,98 @@
+ @import "tailwindcss";
+ 
+ /* ---------------------------------------------------------------------------
+-   Palette. Validated for colour-vision deficiency against both surfaces:
+-   the cerulean/crimson pair separates at deutan ΔE 12.8 (light) and 11.7 (dark),
+-   comfortably above the ΔE 8 target. Cerulean carries gains and identity;
+-   crimson is reserved for deductions and never used as a second series colour.
++   Palette: "Light & Shadow".
++     off-white #EFEEEA · mauve #A994AE · mint #C6E3CC · khaki #D8CF96
++     sky #7DB7DA · taupe #9E9896 · dark taupe #78716B · slate #4D6479
++
++   Light mode: slate carries gains and identity (buttons, bars, accent text);
++   sky is the soft highlight behind it (active nav, selected cards, chips).
++   Dark mode: sky is the accent itself. Mauve is reserved for deductions and is
++   never used as a second series colour. Accent and loss are darkened from the
++   swatches so both read as text (≥ 4.5:1 on every surface).
++
++   Validated for colour-vision deficiency: the slate/mauve pair separates at
++   deutan ΔE 17.5, protan 12.2 (light); sky/lilac at deutan 20.6, protan 12.2
++   (dark) — above the ΔE 8 target.
+ --------------------------------------------------------------------------- */
+ 
+ :root {
+-  --bg: #eef1f5;
+-  --surface: #fbfcfd;
+-  --surface-2: #f2f5f8;
+-  --surface-3: #e7ecf1;
+-  --border: #dbe1e9;
+-  --border-strong: #c3ccd8;
+-  --ink: #111823;
+-  --ink-2: #4b5765;
+-  --ink-muted: #7b8797;
+-  --accent: #0089b0;
++  /* Raw swatches, for one-off accents. Prefer the semantic tokens below. */
++  --sw-offwhite: #efeeea;
++  --sw-mauve: #a994ae;
++  --sw-mint: #c6e3cc;
++  --sw-khaki: #d8cf96;
++  --sw-sky: #7db7da;
++  --sw-taupe: #9e9896;
++  --sw-taupe-dark: #78716b;
++  --sw-slate: #4d6479;
++
++  --bg: #efeeea;
++  --surface: #f8f7f4;
++  --surface-2: #f3f2ee;
++  --surface-3: #e6e4df;
++  --border: #e2dfda;
++  --border-strong: #cfcbc5;
++  --ink: #2d2b29;
++  --ink-2: #4a4541;
++  --ink-muted: #5f5954;
++  --accent: #344a5f;
+   --accent-ink: #ffffff;
+-  --loss: #be2e5e;
+-  --accent-soft: rgb(0 137 176 / 0.12);
+-  --loss-soft: rgb(190 46 94 / 0.11);
+-  --shadow: 0 1px 2px rgb(17 24 35 / 0.05), 0 8px 24px -16px rgb(17 24 35 / 0.22);
++  --loss: #80607a;
++  --accent-soft: rgb(125 183 218 / 0.28);
++  --loss-soft: rgb(169 148 174 / 0.2);
++  --shadow: 0 1px 2px rgb(45 43 41 / 0.05), 0 8px 24px -16px rgb(45 43 41 / 0.2);
+ 
+   /* The pitch is an illustrated ground, not an encoding — it is deliberately
+-     outside the chart palette, and nothing on it carries meaning by hue. */
+-  --turf: #2c8a57;
++     outside the chart palette, and nothing on it carries meaning by hue.
++     A muted sage, dark enough for white names (5.0:1). */
++  --turf: #587762;
+   --turf-line: rgb(255 255 255 / 0.05);
+-  --bench: #1f6444;
++  --bench: #475f4f;
+ }
+ 
+ @media (prefers-color-scheme: dark) {
+   :root:not([data-theme="light"]) {
+-    --turf: #17573c;
++    --turf: #3f5848;
+     --turf-line: rgb(255 255 255 / 0.045);
+-    --bench: #10402d;
+-    --bg: #0d1218;
+-    --surface: #151b23;
+-    --surface-2: #1b222c;
+-    --surface-3: #232c37;
+-    --border: #28313d;
+-    --border-strong: #3a4552;
+-    --ink: #e6ebf1;
+-    --ink-2: #a1aebd;
+-    --ink-muted: #6c7a8a;
+-    --accent: #1e95be;
+-    --accent-ink: #05121a;
+-    --loss: #d4527c;
+-    --accent-soft: rgb(30 149 190 / 0.17);
+-    --loss-soft: rgb(212 82 124 / 0.15);
+-    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -16px rgb(0 0 0 / 0.7);
++    --bench: #33483b;
++    --bg: #1b2027;
++    --surface: #232a32;
++    --surface-2: #2a323b;
++    --surface-3: #333c46;
++    --border: #36404b;
++    --border-strong: #4a5562;
++    --ink: #efeeea;
++    --ink-2: #c9c4bf;
++    --ink-muted: #aba5a2;
++    --accent: #7db7da;
++    --accent-ink: #13232f;
++    --loss: #dcc6e0;
++    --accent-soft: rgb(125 183 218 / 0.18);
++    --loss-soft: rgb(220 198 224 / 0.14);
++    --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 24px -16px rgb(0 0 0 / 0.6);
+   }
+ }
+ 
+ :root[data-theme="dark"] {
+-  --turf: #17573c;
++  --turf: #3f5848;
+   --turf-line: rgb(255 255 255 / 0.045);
+-  --bench: #10402d;
+-  --bg: #0d1218;
+-  --surface: #151b23;
+-  --surface-2: #1b222c;
+-  --surface-3: #232c37;
+-  --border: #28313d;
+-  --border-strong: #3a4552;
+-  --ink: #e6ebf1;
+-  --ink-2: #a1aebd;
+-  --ink-muted: #6c7a8a;
+-  --accent: #1e95be;
+-  --accent-ink: #05121a;
+-  --loss: #d4527c;
+-  --accent-soft: rgb(30 149 190 / 0.17);
+-  --loss-soft: rgb(212 82 124 / 0.15);
+-  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -16px rgb(0 0 0 / 0.7);
++  --bench: #33483b;
++  --bg: #1b2027;
++  --surface: #232a32;
++  --surface-2: #2a323b;
++  --surface-3: #333c46;
++  --border: #36404b;
++  --border-strong: #4a5562;
++  --ink: #efeeea;
++  --ink-2: #c9c4bf;
++  --ink-muted: #aba5a2;
++  --accent: #7db7da;
++  --accent-ink: #13232f;
++  --loss: #dcc6e0;
++  --accent-soft: rgb(125 183 218 / 0.18);
++  --loss-soft: rgb(220 198 224 / 0.14);
++  --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 24px -16px rgb(0 0 0 / 0.6);
+ }
+ 
+ @theme inline {
+@@ -91,6 +111,16 @@
+   --color-loss: var(--loss);
+   --color-loss-soft: var(--loss-soft);
+ 
++  /* Raw swatches as utilities: bg-sky, bg-mint, text-slate, border-mauve … */
++  --color-offwhite: var(--sw-offwhite);
++  --color-mauve: var(--sw-mauve);
++  --color-mint: var(--sw-mint);
++  --color-khaki: var(--sw-khaki);
++  --color-sky: var(--sw-sky);
++  --color-taupe: var(--sw-taupe);
++  --color-taupe-dark: var(--sw-taupe-dark);
++  --color-slate: var(--sw-slate);
++
+   --font-display: "Familjen Grotesk", ui-sans-serif, system-ui, sans-serif;
+   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
