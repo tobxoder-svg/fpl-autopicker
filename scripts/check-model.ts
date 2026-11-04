@@ -11,7 +11,8 @@
 import { expectedMinutes, expectedPoints, shrinkRate } from "../src/model/xp.ts";
 import { formationOf, isLegalXi, swap, type SquadState } from "../src/lib/squad.ts";
 import { nbinomSf, poissonFloorDiv } from "../src/model/distributions.ts";
-import type { Player, Position, Team } from "../src/model/types.ts";
+import type { DataBundle, Player, Position, Team } from "../src/model/types.ts";
+import { backtest, buildMatchModel, matchProbs, predictAll, streakFor } from "../src/model/matches.ts";
 
 let failures = 0;
 function check(name: string, condition: boolean, detail = "") {
@@ -219,6 +220,50 @@ console.log("\nsquad rules (what the drag layer is allowed to do)");
       }),
     ),
   );
+}
+
+
+console.log("\nmatch predictor");
+{
+  const m = matchProbs(1.6, 1.1);
+  check("win + draw + loss = 1", close(m.pHome + m.pDraw + m.pAway, 1, 1e-9));
+  const mirror = matchProbs(1.1, 1.6);
+  check("swapping the sides swaps the outcomes", close(m.pHome, mirror.pAway, 1e-9) && close(m.pDraw, mirror.pDraw, 1e-9));
+  check("Dixon-Coles lifts the draw above plain Poisson", m.pDraw > matchProbs(1.6, 1.1, 0).pDraw);
+
+  // Two clubs, one clearly better, in a tiny league of four.
+  const clubs = [1, 2, 3, 4].map((id) => team({ id, short: `T${id}`, fdr: id === 1 ? 4.5 : 3 }));
+  const results = [
+    { event: 1, kickoff: "2026-08-15T14:00:00Z", teamH: 1, teamA: 2, scoreH: 3, scoreA: 0 },
+    { event: 1, kickoff: "2026-08-15T14:00:00Z", teamH: 3, teamA: 4, scoreH: 1, scoreA: 1 },
+    { event: 2, kickoff: "2026-08-22T14:00:00Z", teamH: 4, teamA: 1, scoreH: 0, scoreA: 2 },
+    { event: 2, kickoff: "2026-08-22T14:00:00Z", teamH: 2, teamA: 3, scoreH: 1, scoreA: 1 },
+  ];
+  const fixtures = [
+    { event: 3, teamH: 1, teamA: 3, finished: false },
+    { event: 3, teamH: 2, teamA: 4, finished: false },
+    { event: 4, teamH: 2, teamA: 1, finished: false },
+    { event: null, teamH: 3, teamA: 1, finished: false },
+  ];
+  const bundle: DataBundle = {
+    generatedAt: "", season: "test", currentEvent: 2, nextEvent: 3,
+    teams: clubs, players: [], fixtures, results,
+  };
+  const model = buildMatchModel(bundle);
+  const preds = predictAll(bundle, model);
+  check("postponed fixtures (no gameweek) are skipped", preds.length === 3);
+  check("the dominant club is rated the strongest attack", [...model.att].every(([id, v]) => id === 1 || v < model.att.get(1)!));
+  check("and is favoured at home", preds[0].pHome > preds[0].pAway);
+  check("and favoured away too", preds[2].pAway > preds[2].pHome);
+  const streak = streakFor(preds, 1, 2)!;
+  check("a streak is the product of its win chances", close(streak.pWinAll, preds[0].pHome * preds[2].pAway, 1e-12));
+  check("a run longer than the fixture list returns nothing", streakFor(preds, 1, 5) === null);
+
+  const old = buildMatchModel({ ...bundle, teams: clubs.map(({ fdr: _f, ...t }) => t), results: undefined });
+  check("an old bundle without results still predicts", predictAll({ ...bundle, results: undefined }, old).every(
+    (p) => Number.isFinite(p.pHome) && close(p.pHome + p.pDraw + p.pAway, 1, 1e-9),
+  ));
+  check("the back-test needs gameweeks after the start", backtest(bundle) === null);
 }
 
 console.log(failures === 0 ? "\nall checks passed\n" : `\n${failures} check(s) failed\n`);

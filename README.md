@@ -47,6 +47,7 @@ access replaces it with the live league automatically.
 | `npm run fetch:data` | Snapshot the live FPL API into `public/data/` |
 | `npm run sample:data` | Regenerate the synthetic bundle |
 | `npm run typecheck` | Types only |
+| `python scripts/predict_matches.py` | Match predictions in the terminal (see below) |
 
 `npm run build` snapshots the live API first and falls back to the committed bundle if the
 API is unreachable, so a build never fails on a bad API minute. `SKIP_DATA_FETCH=1` uses
@@ -129,6 +130,38 @@ actually earns the point.
 This is the largest available edge in the current scoring system, and it is where most
 public tools leave points on the table.
 
+### Match predictions
+
+The **Fixtures** page gives win, draw and loss for every remaining league fixture, plus
+expected goals, the most likely score, both-teams-to-score, a streak calculator and a
+back-test (`src/model/matches.ts`).
+
+Each club gets an attack and a defence rating, fitted twice and blended: from goals in
+finished matches (time-decayed, half-life 90 days) and from season xG / xGC (35 / 65).
+Both fits are opponent-adjusted, and both are shrunk toward a fixture-difficulty prior
+worth six matches, so early-season ratings don't swing on one result. A fixture's expected
+goals are `base × exp(attack + opponent defence)` for each side, and a Dixon–Coles
+corrected Poisson score grid turns them into three outcomes that always sum to one.
+
+A run of wins is the product of each fixture's own win probability. That is the "weighted
+binary tree" approach, except each fork's weight comes from the actual opponent and venue
+instead of one club-wide rate with hand-set multipliers.
+
+The back-test re-predicts every finished gameweek from earlier results only and scores it
+against league base rates and a coin flip. It uses goals only, because season xG totals
+would leak later matches.
+
+The same model runs from the terminal with no dependencies:
+
+```bash
+python scripts/predict_matches.py --horizon 3 --ratings
+python scripts/predict_matches.py --team MUN --streak 5
+python scripts/predict_matches.py --backtest --csv predictions.csv
+```
+
+It calls the FPL API directly, so it needs a machine with internet access (or
+`--data-dir` with saved `bootstrap-static.json` and `fixtures.json`).
+
 ---
 
 ## Known weaknesses
@@ -157,6 +190,10 @@ simpler one whose limits are known.
 - **Transfers are not planned.** The optimiser builds from scratch and does not know your
   current squad. Read the output as "what a clean slate looks like", not as a transfer
   instruction.
+- **Match predictions ignore lineups and injuries.** Ratings are club-level. A side
+  missing its striker is rated as if he plays, and there is no momentum or "pressure"
+  term, because the evidence for one in football is weak once team strength is accounted
+  for. The back-test is the check: if a factor helps, it should lower the log loss.
 - **The API shape is not contractual.** `fetch-fpl.mjs` prefers the API's own
   `defensive_contribution` (verified: it equals CBI + tackles for defenders, plus
   recoveries for everyone else, and 0 for goalkeepers) and falls back to summing the parts.
@@ -193,11 +230,12 @@ scripts/fetch-fpl.mjs     FPL API -> public/data/bundle.json, with assertions
 scripts/prepare-data.mjs  build-time snapshot with a fallback to the committed bundle
 scripts/make-sample.mjs   synthetic bundle for local development
 scripts/check-model.ts    model regression tests (npm test)
-src/model/                the eight xP components and their distributions
+scripts/predict_matches.py  match predictions from the terminal (stdlib Python)
+src/model/                the eight xP components, distributions, match predictor
 src/solver/               LP construction, worker, client
 src/lib/                  data loading, projection, squad rules, kit colours
 src/components/Pitch.tsx  the pitch, the shirts and the drag layer
-src/routes/               overview, builder, method
+src/routes/               overview, builder, fixtures, method
 ```
 
 ---

@@ -1,8 +1,11 @@
 node_modules/
 dist/
-.DS_Store
-*.local
+.autopilot/
+.vercel/
 .vite/
+*.local
+.DS_Store
+
 # copied from node_modules at build time
 public/highs.wasm
 

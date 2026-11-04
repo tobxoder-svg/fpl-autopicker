@@ -74,8 +74,18 @@ function LivePanel() {
   return (
     <Card className="overflow-hidden">
       <div className="px-4 py-3 border-b border-line flex items-baseline justify-between gap-3">
-        <span className="eyebrow">Live · highest projected, next 5 GW</span>
-        {state.status === "ready" && state.dataset.isSample && <Chip tone="loss">sample</Chip>}
+        <span className="eyebrow">Highest projected, next 5 GW</span>
+        {state.status === "ready" &&
+          (state.dataset.isSample ? (
+            <Chip tone="loss">sample</Chip>
+          ) : (
+            <span title={`Data from ${new Date(state.dataset.bundle.generatedAt).toLocaleString()}`}>
+              <Chip tone={state.dataset.source === "live" ? "accent" : "neutral"}>
+                {state.dataset.source} ·{" "}
+                {new Date(state.dataset.bundle.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </Chip>
+            </span>
+          ))}
       </div>
 
       {state.status === "loading" && (

@@ -107,20 +107,55 @@ teams.forEach((team, i) => {
   }
 });
 
-// A double round-robin, two matches per gameweek slot, 38 gameweeks.
+// A double round-robin by the circle method: every club meets every other once
+// per half, with venues swapped in the second half. 38 gameweeks.
 const fixtures = [];
+const ids = teams.map((t) => t.id);
 for (let gw = 1; gw <= 38; gw++) {
-  const ids = teams.map((t) => t.id);
-  for (let k = 0; k < ids.length; k += 2) {
-    const home = gw % 2 === 0;
+  const round = (gw - 1) % 19;
+  for (let k = 0; k < ids.length / 2; k++) {
+    let [h, a] = [ids[k], ids[ids.length - 1 - k]];
+    if ((round + k) % 2 === 1) [h, a] = [a, h];
+    if (gw > 19) [h, a] = [a, h];
     fixtures.push({
       event: gw,
-      teamH: home ? ids[k] : ids[k + 1],
-      teamA: home ? ids[k + 1] : ids[k],
+      teamH: h,
+      teamA: a,
       finished: gw < 4,
+      kickoff: new Date(Date.UTC(2026, 7, 15 + 7 * (gw - 1), 14 + 3 * (k % 3))).toISOString(),
     });
   }
-  ids.splice(1, 0, ids.pop());
+  ids.splice(1, 0, ids.pop()); // rotate everyone but the first club
+}
+
+// Results for the finished rounds, drawn from each club's profile, plus the raw
+// strength signals the match predictor reads. Drawn after the players so the
+// sample squads are unchanged from earlier bundles.
+const poisson = (lambda) => {
+  const limit = Math.exp(-lambda);
+  let k = 0, p = rnd();
+  while (p > limit) { k++; p *= rnd(); }
+  return k;
+};
+const byId = new Map(teams.map((t) => [t.id, t]));
+const results = fixtures
+  .filter((f) => f.finished)
+  .map((f) => {
+    const h = byId.get(f.teamH), a = byId.get(f.teamA);
+    return {
+      event: f.event,
+      kickoff: f.kickoff,
+      teamH: f.teamH,
+      teamA: f.teamA,
+      scoreH: poisson(1.5 * h.attack * a.defence),
+      scoreA: poisson(1.2 * a.attack * h.defence),
+    };
+  });
+for (const [i, t] of teams.entries()) {
+  const tier = i < 2 ? 0 : i < 6 ? 1 : i < 14 ? 2 : 3;
+  t.fdr = [4.6, 3.8, 3, 2.3][tier];
+  t.xgForPerMatch = round(1.35 * t.attack * (0.9 + rnd() * 0.2), 3);
+  t.xgAgainstPerMatch = round(1.35 * t.defence * (0.9 + rnd() * 0.2), 3);
 }
 
 const bundle = {
@@ -131,6 +166,7 @@ const bundle = {
   teams,
   players,
   fixtures,
+  results,
 };
 
 await mkdir("public/data", { recursive: true });

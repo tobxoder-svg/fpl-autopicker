@@ -13,7 +13,8 @@
     "predev": "node scripts/copy-wasm.mjs",
     "prebuild": "node scripts/copy-wasm.mjs && node scripts/prepare-data.mjs",
     "sample:data": "node scripts/make-sample.mjs",
-    "test": "tsx scripts/check-model.ts"
+    "test": "tsx scripts/check-model.ts",
+    "autopilot": "node scripts/autopilot.mjs --plan autopilot/plan.json"
   },
   "dependencies": {
     "highs": "^1.15.2",

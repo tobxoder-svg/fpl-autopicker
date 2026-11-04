@@ -21,6 +21,14 @@ export interface Team {
    * of one appearance look nailed on.
    */
   matchesPlayed: number;
+  /**
+   * Match-predictor inputs (optional; bundles written before the Fixtures page
+   * lack them and the predictor falls back to `attack`/`defence` as its prior).
+   * `fdr` is the average difficulty other clubs are given when facing this one.
+   */
+  fdr?: number;
+  xgForPerMatch?: number;
+  xgAgainstPerMatch?: number;
 }
 
 /** One player, with the per-90 rates the eight components consume. */
@@ -64,6 +72,18 @@ export interface Fixture {
   teamH: number;
   teamA: number;
   finished: boolean;
+  /** ISO kick-off time, UTC. Absent in older bundles. */
+  kickoff?: string | null;
+}
+
+/** A played league match. Feeds the match predictor's goals fit and back-test. */
+export interface MatchResult {
+  event: number;
+  kickoff: string | null;
+  teamH: number;
+  teamA: number;
+  scoreH: number;
+  scoreA: number;
 }
 
 export interface DataBundle {
@@ -74,6 +94,8 @@ export interface DataBundle {
   teams: Team[];
   players: Player[];
   fixtures: Fixture[];
+  /** Finished league matches. Absent in older bundles. */
+  results?: MatchResult[];
 }
 
 /** One gameweek's fixture for one club. A double gameweek yields two entries. */

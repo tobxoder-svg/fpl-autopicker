@@ -5,6 +5,9 @@ import Layout from "./components/Layout";
 import Landing from "./routes/Landing";
 import Builder from "./routes/Builder";
 import Method from "./routes/Method";
+import Fixtures from "./routes/Fixtures";
+import MyTeam from "./routes/MyTeam";
+import Autopilot from "./routes/Autopilot";
 import "./index.css";
 
 // HashRouter, not BrowserRouter: GitHub Pages serves static files, so a deep
@@ -16,6 +19,9 @@ createRoot(document.getElementById("root")!).render(
         <Route element={<Layout />}>
           <Route path="/" element={<Landing />} />
           <Route path="/builder" element={<Builder />} />
+          <Route path="/fixtures" element={<Fixtures />} />
+          <Route path="/my-team" element={<MyTeam />} />
+          <Route path="/autopilot" element={<Autopilot />} />
           <Route path="/method" element={<Method />} />
           <Route path="*" element={<Landing />} />
         </Route>
@@ -23,3 +29,15 @@ createRoot(document.getElementById("root")!).render(
     </HashRouter>
   </StrictMode>,
 );
+
+// Installed-app support: open instantly and work offline. Production only — a
+// worker caching dev-server modules makes hot reload lie.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
+      .catch(() => {
+        /* unsupported context (e.g. private mode) — the site still works */
+      });
+  });
+}

@@ -67,8 +67,13 @@ export function projectAll(ds: Dataset, strategy: Strategy): Projection[] {
  * keeping the best few per position-and-price band cuts solve time without
  * changing the answer, and keeps a genuine budget-enabler bench available.
  */
-export function toCandidates(projections: Projection[], strategy: Strategy): Candidate[] {
-  const forced = new Set(strategy.forceIn);
+export function toCandidates(
+  projections: Projection[],
+  strategy: Strategy,
+  /** Always keep these in the pool (e.g. the user's current squad). */
+  include: number[] = [],
+): Candidate[] {
+  const forced = new Set([...strategy.forceIn, ...include]);
   const banned = new Set(strategy.forceOut);
 
   const buckets = new Map<string, Projection[]>();

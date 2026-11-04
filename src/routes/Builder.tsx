@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataset } from "../lib/useDataset";
 import { projectAll, toCandidates, type Projection } from "../lib/projections";
 import { solveSquad } from "../solver/client";
-import { DEFAULT_STRATEGY, type Strategy, type Team } from "../model/types";
+import { DEFAULT_STRATEGY, type Strategy } from "../model/types";
 import { Card, Chip, Slider, StatTile, Waterfall } from "../components/ui";
 import Pitch, { type PitchPlayer } from "../components/Pitch";
+import { pitchPlayersFor } from "../lib/pitch";
 import {
   formationOf,
   fromSolution,
@@ -22,20 +23,6 @@ interface Solution {
   xiIds: number[];
   captainId: number | null;
   objective: number;
-}
-
-/**
- * Fixture difficulty on the familiar 1–5 scale, but derived from this model's
- * own team ratings rather than the official one — which means it agrees with
- * the projections shown beside it.
- */
-function difficultyOf(opponent: Team): number {
-  const s = (opponent.attack + (1.6 - opponent.defence)) / 2;
-  if (s < 0.68) return 1;
-  if (s < 0.76) return 2;
-  if (s < 0.84) return 3;
-  if (s < 0.94) return 4;
-  return 5;
 }
 
 export default function Builder() {
@@ -132,33 +119,10 @@ export default function Builder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [solutions, active]);
 
-  const pitchPlayers = useMemo(() => {
-    const map = new Map<number, PitchPlayer>();
-    if (!dataset || !squad) return map;
-    for (const id of squad.squad) {
-      const p = byId.get(id);
-      if (!p) continue;
-      const team = dataset.teamsById.get(p.player.teamId);
-      const fixtures = (dataset.fixturesByTeam.get(p.player.teamId) ?? []).filter(
-        (f) => f.event === dataset.startEvent,
-      );
-      const opponents = fixtures.map((f) => dataset.teamsById.get(f.opponentId));
-      map.set(id, {
-        id,
-        name: p.player.webName,
-        pos: p.player.pos,
-        teamId: p.player.teamId,
-        teamShort: team?.short ?? "—",
-        cost: p.player.cost,
-        xp: p.xpNext,
-        fixture: fixtures
-          .map((f, i) => `${opponents[i]?.short ?? "?"} (${f.home ? "H" : "A"})`)
-          .join(" · "),
-        difficulty: opponents[0] ? difficultyOf(opponents[0]) : null,
-      });
-    }
-    return map;
-  }, [byId, dataset, squad]);
+  const pitchPlayers = useMemo(
+    () => (dataset && squad ? pitchPlayersFor(squad.squad, dataset, byId) : new Map<number, PitchPlayer>()),
+    [byId, dataset, squad],
+  );
 
   const onSwap = useCallback(
     (a: number, b: number) => {

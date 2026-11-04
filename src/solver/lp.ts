@@ -44,6 +44,12 @@ export interface SolveParams {
   ownershipWeight: number;
   forceIn: number[];
   forceOut: number[];
+  /**
+   * Transfer mode: the solution must keep at least `minKept` of these players
+   * (an existing squad). With `budget` = bank + squad value, solving for
+   * minKept = 15 - k gives the best squad reachable in at most k transfers.
+   */
+  keep?: { ids: number[]; minKept: number };
 }
 
 export const SQUAD_SHAPE: Record<Position, number> = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
@@ -144,6 +150,17 @@ export function buildSquadLp(
   for (const id of params.forceOut) {
     const i = indexById.get(id);
     if (i !== undefined) cons.push(`fout${i}: + 1 x${i} = 0`);
+  }
+
+  if (params.keep) {
+    const kept = params.keep.ids
+      .map((id) => indexById.get(id))
+      .filter((i): i is number => i !== undefined)
+      .map((i) => [1, `x${i}`] as [number, string]);
+    // Players no longer in the game drop out of the pool and must be sold, so
+    // never demand more than the pool can supply.
+    const need = Math.min(params.keep.minKept, kept.length);
+    if (kept.length && need > 0) cons.push(`keep: ${terms(kept)} >= ${need}`);
   }
 
   // k-best: each new squad must differ from every previous one by at least

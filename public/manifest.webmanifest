@@ -1,0 +1,40 @@
+{
+  "id": "./",
+  "name": "Fantasy Drafter — FPL optimiser",
+  "short_name": "Drafter",
+  "description": "FPL squad optimiser: open expected-points model, transfer suggestions for your own team, and autopilot proposals.",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef1f5",
+  "theme_color": "#0089b0",
+  "lang": "en",
+  "categories": ["sports", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "My team",
+      "short_name": "My team",
+      "description": "Your squad and the transfers worth making",
+      "url": "./#/my-team",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Autopilot",
+      "short_name": "Autopilot",
+      "description": "This gameweek's proposal and checks",
+      "url": "./#/autopilot",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Squad builder",
+      "short_name": "Builder",
+      "url": "./#/builder",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png" }]
+    }
+  ]
+}
