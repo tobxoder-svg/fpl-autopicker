@@ -54,13 +54,18 @@ function Shirt({ teamShort, teamId, compact }: { teamShort: string; teamId: numb
 
 /* --------------------------------------------------------------- fixtures */
 
-/** Fixture difficulty as a subtle tint. Not a chart colour — a status band. */
+/**
+ * Fixture difficulty as a subtle tint. Not a chart colour — a status band.
+ * Four tiers with hue as the only cue, so the tints are palette values tuned
+ * for colour-blind separation (see index.css); don't swap them for stock
+ * Tailwind greens and reds, which collapse to one colour under deuteranopia.
+ */
 function difficultyTone(d: number | null): string {
   if (d === null) return "text-white/70";
-  if (d <= 2) return "text-emerald-200";
-  if (d === 3) return "text-white/80";
-  if (d === 4) return "text-amber-200";
-  return "text-rose-200";
+  if (d <= 2) return "text-fdr-easy";
+  if (d === 3) return "text-fdr-mid";
+  if (d === 4) return "text-fdr-hard";
+  return "text-fdr-worst";
 }
 
 /* ------------------------------------------------------------------- card */
