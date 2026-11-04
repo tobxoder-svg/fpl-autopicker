@@ -1,7 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
 
-const REPO = "https://github.com/tobxoder-svg/fantasy-drafter";
+// The folder is called fantasy-drafter; the repo is fpl-autopicker. The
+// fantasy-drafter repo is a stale manual upload — don't point people at it.
+const REPO = "https://github.com/tobxoder-svg/fpl-autopicker";
 
 type Theme = "light" | "dark" | "system";
 
@@ -30,19 +32,90 @@ function useTheme(): [Theme, (t: Theme) => void] {
   return [theme, setTheme];
 }
 
+const THEME_OPTIONS: Array<{ value: Theme; label: string; icon: React.ReactNode }> = [
+  {
+    value: "system",
+    label: "Auto",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="8.75" />
+        <path d="M12 3.25a8.75 8.75 0 0 1 0 17.5z" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  {
+    value: "light",
+    label: "Light",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="4.25" />
+        <path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" />
+      </>
+    ),
+  },
+  {
+    value: "dark",
+    label: "Dark",
+    icon: <path d="M20.5 14.3A8.75 8.75 0 1 1 9.7 3.5a7 7 0 0 0 10.8 10.8z" />,
+  },
+];
+
+/**
+ * Three explicit choices rather than a cycling button: a single button that
+ * relabels itself gives no hint that it controls the theme, nor what the other
+ * states are. "Auto" tracks the OS and is the default.
+ */
 function ThemeToggle() {
   const [theme, setTheme] = useTheme();
-  const order: Theme[] = ["system", "light", "dark"];
-  const label = { system: "Auto", light: "Light", dark: "Dark" }[theme];
   return (
-    <button
-      type="button"
-      onClick={() => setTheme(order[(order.indexOf(theme) + 1) % order.length])}
-      className="font-mono text-[11px] tracking-wide uppercase text-ink-2 border border-line-strong rounded px-2.5 py-1.5 hover:bg-surface-2 hover:text-ink transition-colors"
-      aria-label={`Theme: ${label}. Click to change.`}
+    <div
+      role="radiogroup"
+      aria-label="Colour theme"
+      className="flex items-center gap-0.5 rounded-lg border border-line-strong bg-surface-2 p-0.5"
     >
-      {label}
-    </button>
+      {THEME_OPTIONS.map((opt) => {
+        const active = theme === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            title={`${opt.label} theme`}
+            onClick={() => setTheme(opt.value)}
+            className={[
+              "relative flex items-center gap-1.5 rounded-md font-mono text-[11px]",
+              "uppercase tracking-wide transition-colors",
+              // Roomy enough to hit with a thumb on a phone; tightens up once
+              // the labels appear and a mouse is the likely input.
+              "px-3 py-2 md:px-2 md:py-1",
+              // Stretches the touch target to ~46px tall without changing how
+              // big the control looks. Safe vertically — the header has slack
+              // above and below, and the segments only neighbour each other
+              // horizontally.
+              "after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-['']",
+              active
+                ? "bg-accent text-accent-ink"
+                : "text-ink-muted hover:bg-surface-3 hover:text-ink",
+            ].join(" ")}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden
+              className="w-[17px] h-[17px] md:w-[14px] md:h-[14px] shrink-0"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {opt.icon}
+            </svg>
+            <span className="hidden md:inline">{opt.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
