@@ -96,6 +96,8 @@ export interface DataBundle {
   fixtures: Fixture[];
   /** Finished league matches. Absent in older bundles. */
   results?: MatchResult[];
+  /** Upcoming FPL deadlines (ISO, UTC). Absent in older bundles. */
+  deadlines?: Array<{ event: number; deadline: string }>;
 }
 
 /** One gameweek's fixture for one club. A double gameweek yields two entries. */

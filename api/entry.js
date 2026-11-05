@@ -12,6 +12,7 @@
 import { fplGet, sendError, UpstreamError } from "./_lib/fpl.js";
 
 const FT_CAP = 5;
+const POS = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
 
 /**
  * Free transfers available for the next deadline, replayed from history.
@@ -43,7 +44,11 @@ export default async function handler(req, res) {
   if (!/^\d{1,9}$/.test(id)) return res.status(400).json({ error: "Team ID must be a number" });
 
   try {
-    const [entry, history] = await Promise.all([fplGet(`/entry/${id}/`), fplGet(`/entry/${id}/history/`)]);
+    const [entry, history, boot] = await Promise.all([
+      fplGet(`/entry/${id}/`),
+      fplGet(`/entry/${id}/history/`),
+      fplGet("/bootstrap-static/"),
+    ]);
     const event = entry.current_event;
     if (!event) throw new UpstreamError("This team has not played a gameweek yet", 404);
     const picks = await fplGet(`/entry/${id}/event/${event}/picks/`);
@@ -77,6 +82,19 @@ export default async function handler(req, res) {
         isCaptain: !!p.is_captain,
         isVice: !!p.is_vice_captain,
       })),
+      // Price, position and club for each squad player — the Autopilot tab needs
+      // them for a player the projection data leaves out (injured, never played).
+      players: squadPicks.picks.map((p) => {
+        const el = (boot.elements ?? []).find((e) => e.id === p.element) ?? {};
+        return {
+          id: p.element,
+          webName: el.web_name ?? `#${p.element}`,
+          pos: POS[el.element_type] ?? "MID",
+          teamId: el.team ?? 0,
+          nowCost: el.now_cost ?? 0,
+          status: el.status ?? "a",
+        };
+      }),
     });
   } catch (err) {
     if (err.status === 404 && /^Not found: \/entry\/\d+\/$/.test(err.message)) {

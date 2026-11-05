@@ -6,18 +6,15 @@
  * works out the week's transfers and lineup from live FPL data, checks every
  * FPL rule, and submits them. The owner's rules are enforced in code:
  *
- *   1. Never go minus on points.
- *      - No hits, ever: transfers are capped at the free transfers available.
- *      - A transfer is only made if it raises expected points by at least
- *        MIN_GAIN_PER_TRANSFER (default 1.0 xP over the 5-GW horizon);
- *        otherwise the free transfer rolls.
- *   2. Execute 12 hours or less before the deadline.
- *      - Acts only when the deadline is between WINDOW_MIN_H (1h) and 12h
- *        away. WINDOW_MAX_H can be lowered but never raised above 12.
- *   3. Optimise money left, still favouring high expected points.
- *      - First the best expected points for the chosen number of transfers;
- *        then, among squads within BANK_TOLERANCE_XP (default 2 xP) of
- *        that, the one that spends least — i.e. leaves the most money.
+ *   1. Never go minus on points: no hits ever (transfers capped at the free
+ *      transfers), and each transfer must add at least minGainPerTransfer xP.
+ *   2. Execute 12 hours or less before the deadline (windowMaxH, hard cap 12).
+ *   3. Best expected points first; among squads within bankToleranceXp of the
+ *      best, the one that leaves the most money.
+ *
+ * The criteria live in autopilot/criteria.json — the same file the Autopilot
+ * tab reads, so its preview matches what runs here. The planning itself is
+ * src/lib/autoplan.ts, shared with the tab.
  *
  * Also: it buys only fully available players, never plays a chip, leaves the
  * week alone if you have already made transfers or activated a chip yourself,
@@ -34,16 +31,17 @@
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { createHash } from "node:crypto";
 import highsLoader from "highs";
 import { buildBundle } from "../shared/build-bundle.mjs";
 import { indexBundle } from "../src/lib/data.ts";
-import { projectAll, toCandidates, type Projection } from "../src/lib/projections.ts";
+import { projectAll } from "../src/lib/projections.ts";
 import { buildSquadLp, type Candidate, type SolveParams } from "../src/solver/lp.ts";
-import { fromSolution } from "../src/lib/squad.ts";
-import { DEFAULT_STRATEGY, type Position } from "../src/model/types.ts";
+import { DEFAULT_STRATEGY } from "../src/model/types.ts";
+import { normaliseCriteria, planWeek, type Solved, type TeamPick, type WeekPlan } from "../src/lib/autoplan.ts";
 import {
   AuthError,
   TemporaryError,
@@ -60,8 +58,6 @@ import {
 
 const API = "https://fantasy.premierleague.com/api";
 const UA = { "User-Agent": "fpl-autopicker/1.0 (personal team automation)" };
-const POS_ORDER: Position[] = ["GK", "DEF", "MID", "FWD"];
-const MAX_FREE_TRANSFERS = 5;
 
 // ---------------------------------------------------------------------------
 // Config
@@ -78,17 +74,20 @@ const { values: args } = parseArgs({
   },
 });
 
-const num = (v: string | undefined, d: number) => {
-  const n = Number(v);
-  return v !== undefined && v !== "" && Number.isFinite(n) ? n : d;
-};
+function loadCriteria() {
+  try {
+    const raw = JSON.parse(readFileSync(new URL("../autopilot/criteria.json", import.meta.url), "utf8"));
+    return normaliseCriteria(raw);
+  } catch (err) {
+    console.warn(`autopilot/criteria.json unreadable (${(err as Error).message}) — using defaults`);
+    return normaliseCriteria(null);
+  }
+}
+
+export const CRITERIA = loadCriteria();
 
 export const CONFIG = {
   mode: process.env.AUTOPILOT_MODE === "live" ? "live" : "dry-run",
-  minGainPerTransfer: Math.max(0.01, num(process.env.MIN_GAIN_PER_TRANSFER, 1.0)),
-  bankToleranceXp: Math.max(0, num(process.env.BANK_TOLERANCE_XP, 2)),
-  windowMaxH: Math.min(12, num(process.env.WINDOW_MAX_H, 12)), // owner's rule: never above 12
-  windowMinH: Math.max(0.5, num(process.env.WINDOW_MIN_H, 1)),
   setLineup: process.env.SET_LINEUP !== "false",
 } as const;
 
@@ -96,13 +95,6 @@ export const CONFIG = {
 // Types
 // ---------------------------------------------------------------------------
 
-interface TeamPick {
-  element: number;
-  position: number;
-  isCaptain: boolean;
-  isVice: boolean;
-  sellingPrice: number;
-}
 export interface MyTeam {
   picks: TeamPick[];
   bank: number;
@@ -110,33 +102,6 @@ export interface MyTeam {
   unlimited: boolean;
   made: number;
   chips: Array<{ name: string; available: boolean; status?: string }>;
-}
-interface Solved {
-  objective: number;
-  squad: number[];
-  xi: number[];
-  captain: number | null;
-}
-export interface WeekPlan {
-  event: number;
-  transfersUsed: number;
-  freeTransfers: number;
-  objectiveByK: Array<{ k: number; objective: number }>;
-  rollObjective: number;
-  finalObjective: number;
-  gain: number;
-  bankBefore: number;
-  bankAfter: number;
-  bankSavedByTieBreak: number;
-  plan: {
-    event: number;
-    generated_at: string;
-    source: string;
-    chip: null;
-    picks: Array<{ element: number; position: number; is_captain: boolean; is_vice_captain: boolean }>;
-    xp: Record<string, number>;
-  };
-  notes: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -160,199 +125,13 @@ function picked(columns: Record<string, { Primal?: number }>, prefix: string): n
   return out;
 }
 
-/** The squad objective (expected points) of a fixed squad/XI/captain. */
-function objectiveOf(cands: Candidate[], p: SolveParams, sol: { squad: number[]; xi: number[]; captain: number | null }) {
-  const lp = buildSquadLp(cands, p);
-  const line = lp.split("\n")[1].replace(/^\s*obj:\s*/, "");
-  const coef = new Map<string, number>();
-  for (const m of line.matchAll(/([+-])\s*([\d.]+)\s+(\w+)/g)) {
-    coef.set(m[3], (m[1] === "-" ? -1 : 1) * Number(m[2]));
-  }
-  let v = 0;
-  for (const i of sol.squad) v += coef.get(`x${i}`) ?? 0;
-  for (const i of sol.xi) v += coef.get(`y${i}`) ?? 0;
-  if (sol.captain != null) v += coef.get(`c${sol.captain}`) ?? 0;
-  return v;
-}
-
 async function solve(cands: Candidate[], params: SolveParams): Promise<Solved | null> {
   const h = await solver();
-  const lp = buildSquadLp(cands, params);
-  const r = h.solve(lp, { time_limit: 30, mip_rel_gap: 0.0001, output_flag: false });
+  const r = h.solve(buildSquadLp(cands, params), { time_limit: 30, mip_rel_gap: 0.0001, output_flag: false });
   if (r.Status !== "Optimal") return null;
   const squad = picked(r.Columns, "x");
   if (squad.length !== 15) return null;
-  const xi = picked(r.Columns, "y");
-  const captain = picked(r.Columns, "c")[0] ?? null;
-  // In money mode the solver's objective is spend; report expected points.
-  const objective = params.money
-    ? objectiveOf(cands, { ...params, money: undefined }, { squad, xi, captain })
-    : (r.ObjectiveValue ?? 0);
-  return { objective, squad, xi, captain };
-}
-
-// ---------------------------------------------------------------------------
-// The weekly plan
-// ---------------------------------------------------------------------------
-
-/** Players it is allowed to buy: fully available, nothing flagged. */
-function buyable(p: Projection): boolean {
-  return p.player.status === "a" && (p.player.chanceOfPlaying == null || p.player.chanceOfPlaying >= 100);
-}
-
-export async function planWeek(opts: {
-  boot: any;
-  fixtures: any;
-  team: MyTeam;
-  event: number;
-  maxTransfers?: number; // forced cap (0 = lineup only)
-  now?: Date;
-}): Promise<WeekPlan> {
-  const { boot, fixtures, team, event } = opts;
-  const notes: string[] = [];
-  const owned = team.picks.map((p) => p.element);
-  const ownedSet = new Set(owned);
-  const selling = new Map(team.picks.map((p) => [p.element, p.sellingPrice]));
-
-  const bundle = buildBundle(boot, fixtures, {
-    includeIds: owned,
-    generatedAt: (opts.now ?? new Date()).toISOString(),
-  });
-  const ds = indexBundle(bundle, "live");
-  if (ds.startEvent !== event) {
-    notes.push(`Model's next gameweek is ${ds.startEvent}, deadline is GW${event} — using GW${event} fixtures.`);
-  }
-  const strategy = { ...DEFAULT_STRATEGY };
-  const projections = projectAll(ds, strategy);
-
-  const banned = projections.filter((p) => !ownedSet.has(p.player.id) && !buyable(p)).map((p) => p.player.id);
-  const candidates = toCandidates(projections, { ...strategy, forceOut: banned }, owned).map((c) =>
-    // Keeping a player is worth his selling price, not today's price.
-    ownedSet.has(c.id) ? { ...c, cost: selling.get(c.id) ?? c.cost } : c,
-  );
-  const missing = owned.filter((id) => !candidates.some((c) => c.id === id));
-  if (missing.length) throw new Error(`squad players missing from the pool: ${missing.join(", ")}`);
-
-  const bankBefore = team.bank;
-  const squadValue = owned.reduce((s, id) => s + (selling.get(id) ?? 0), 0);
-  const bw = strategy.benchWeights;
-  const base: SolveParams = {
-    budget: team.bank + squadValue,
-    minBank: 0,
-    maxPerClub: strategy.maxPerClub,
-    benchWeight: (bw[0] + bw[1] + bw[2]) / 3,
-    benchGkWeight: strategy.benchGkWeight,
-    startShare: 0.85,
-    riskLambda: 0,
-    ownershipWeight: 0,
-    forceIn: [],
-    forceOut: [],
-  };
-
-  // Rule 1: transfers never exceed free transfers — no hits.
-  const ft = Math.min(MAX_FREE_TRANSFERS, Math.max(0, team.freeTransfers));
-  const cap = Math.min(ft, opts.maxTransfers ?? ft);
-
-  const byK: Array<{ k: number; sol: Solved }> = [];
-  for (let k = 0; k <= cap; k++) {
-    const sol = await solve(candidates, { ...base, keep: { ids: owned, minKept: 15 - k } });
-    if (!sol) {
-      if (k === 0) throw new Error("could not solve the current squad's lineup");
-      break;
-    }
-    byK.push({ k, sol });
-  }
-  const roll = byK[0].sol;
-
-  // Each transfer must earn at least minGain xP; pick the count that does best net of that.
-  let best = byK[0];
-  for (const e of byK) {
-    const score = e.sol.objective - CONFIG.minGainPerTransfer * e.k;
-    const bestScore = best.sol.objective - CONFIG.minGainPerTransfer * best.k;
-    if (score > bestScore + 1e-6) best = e;
-  }
-
-  let finalSol = roll;
-  let tieBreakSaving = 0;
-  if (best.k > 0) {
-    // Rule 3: keep expected points near the best, then spend as little as possible.
-    const floor =
-      Math.max(best.sol.objective - CONFIG.bankToleranceXp, roll.objective + CONFIG.minGainPerTransfer * best.k) -
-      1e-4;
-    const keepK = { ids: owned, minKept: 15 - best.k };
-    const cheap = await solve(candidates, { ...base, keep: keepK, money: { minObjective: floor } });
-    const chosen = cheap ?? best.sol;
-    // Money mode fixes the squad; re-solve for that squad's best XI and captain.
-    const lineup = await solve(candidates, {
-      ...base,
-      keep: { ids: chosen.squad.map((i) => candidates[i].id), minKept: 15 },
-    });
-    finalSol = lineup ?? chosen;
-    const spend = (s: Solved) => s.squad.reduce((a, i) => a + candidates[i].cost, 0);
-    tieBreakSaving = spend(best.sol) - spend(finalSol);
-  }
-
-  const ids = (is: number[]) => is.map((i) => candidates[i].id);
-  const squadIds = ids(finalSol.squad);
-  const xiIds = ids(finalSol.xi);
-  const captainId = finalSol.captain != null ? candidates[finalSol.captain].id : null;
-  const proj = new Map(projections.map((p) => [p.player.id, p]));
-  const posOf = (id: number) => proj.get(id)?.player.pos;
-  const xpNext = (id: number) => proj.get(id)?.xpNext ?? 0;
-
-  const transfersUsed = squadIds.filter((id) => !ownedSet.has(id)).length;
-  if (transfersUsed > ft) throw new Error(`planner produced ${transfersUsed} transfers with ${ft} free — refusing`);
-
-  // Lineup: XI in formation order, captain from the solver, vice = next-best starter.
-  const state = fromSolution(squadIds, xiIds, captainId, posOf, xpNext);
-  const xi = [...state.xi].sort((a, b) => POS_ORDER.indexOf(posOf(a)!) - POS_ORDER.indexOf(posOf(b)!));
-  const captain = state.captain ?? [...xi].sort((a, b) => xpNext(b) - xpNext(a))[0];
-  const vice = xi.filter((id) => id !== captain).sort((a, b) => xpNext(b) - xpNext(a))[0];
-  const order = [...xi, ...state.bench];
-
-  const costNow = (id: number) => proj.get(id)?.player.cost ?? 0;
-  const bankAfter =
-    bankBefore +
-    owned.filter((id) => !squadIds.includes(id)).reduce((s, id) => s + (selling.get(id) ?? 0), 0) -
-    squadIds.filter((id) => !ownedSet.has(id)).reduce((s, id) => s + costNow(id), 0);
-
-  const xpMap: Record<string, number> = {};
-  for (const id of new Set([...owned, ...squadIds])) xpMap[id] = Number((proj.get(id)?.xpHorizon ?? 0).toFixed(2));
-
-  if (best.k === 0 && byK.length > 1) {
-    const top = byK[byK.length - 1];
-    notes.push(
-      `Rolled: the best move (+${(top.sol.objective - roll.objective).toFixed(1)} xP with ${top.k}) ` +
-        `didn't clear ${CONFIG.minGainPerTransfer} xP per transfer.`,
-    );
-  }
-
-  return {
-    event,
-    transfersUsed,
-    freeTransfers: ft,
-    objectiveByK: byK.map((e) => ({ k: e.k, objective: Number(e.sol.objective.toFixed(2)) })),
-    rollObjective: roll.objective,
-    finalObjective: finalSol.objective,
-    gain: finalSol.objective - roll.objective,
-    bankBefore,
-    bankAfter,
-    bankSavedByTieBreak: tieBreakSaving,
-    plan: {
-      event,
-      generated_at: (opts.now ?? new Date()).toISOString(),
-      source: "fpl-autopicker/autopick",
-      chip: null,
-      picks: order.map((element, i) => ({
-        element,
-        position: i + 1,
-        is_captain: element === captain,
-        is_vice_captain: element === vice,
-      })),
-      xp: xpMap,
-    },
-    notes,
-  };
+  return { objective: r.ObjectiveValue ?? 0, squad, xi: picked(r.Columns, "y"), captain: picked(r.Columns, "c")[0] ?? null };
 }
 
 // ---------------------------------------------------------------------------
@@ -403,6 +182,12 @@ function activeChip(raw: any): string | null {
 // Main
 // ---------------------------------------------------------------------------
 
+/** Opt-in: the outcome for the app's Autopilot tab (live runs only). */
+async function publish(dl: any, d: any, verdict: string) {
+  if (CONFIG.mode !== "live" || !process.env.AUTOPILOT_PUBLISH_PATH) return;
+  await writeFile(process.env.AUTOPILOT_PUBLISH_PATH, JSON.stringify({ ...toProposal(dl, d), verdict }, null, 1) + "\n");
+}
+
 async function writeMarker(value: string) {
   if (process.env.AUTOPILOT_DONE_FILE) await writeFile(process.env.AUTOPILOT_DONE_FILE, value);
 }
@@ -420,11 +205,11 @@ async function main(): Promise<number> {
     : await Promise.all([getJson("/bootstrap-static/"), getJson("/fixtures/")]);
   const dl = nextDeadline(boot.events, now.getTime());
   if (!dl) return say("No upcoming deadline — season over."), 0;
-  const inWindow = dl.hoursLeft <= CONFIG.windowMaxH && dl.hoursLeft >= CONFIG.windowMinH;
+  const inWindow = dl.hoursLeft <= CRITERIA.windowMaxH && dl.hoursLeft >= CRITERIA.windowMinH;
   // --force previews outside the window, but never in live mode: rule 2 is absolute.
   const forced = Boolean(args.force) && CONFIG.mode !== "live";
   if (!inWindow && !forced) {
-    say(`GW${dl.event} deadline in ${dl.hoursLeft.toFixed(1)}h — acts only between ${CONFIG.windowMaxH}h and ${CONFIG.windowMinH}h before.`);
+    say(`GW${dl.event} deadline in ${dl.hoursLeft.toFixed(1)}h — acts only between ${CRITERIA.windowMaxH}h and ${CRITERIA.windowMinH}h before.`);
     return 0;
   }
   say(`GW${dl.event}: ${dl.hoursLeft.toFixed(1)}h to deadline. Mode: ${CONFIG.mode}.`);
@@ -471,7 +256,18 @@ async function main(): Promise<number> {
   if (team.made > 0 && !transfersAlreadyDone) return handsOff(`you've already made ${team.made} transfer(s) yourself`);
 
   // 5. Plan. If transfers already went through on an earlier run, only redo the lineup.
-  const week = await planWeek({ boot, fixtures, team, event: dl.event, maxTransfers: transfersAlreadyDone ? 0 : undefined, now });
+  const bundle = buildBundle(boot, fixtures, { includeIds: team.picks.map((p) => p.element), generatedAt: now.toISOString() });
+  const ds = indexBundle(bundle, "live");
+  const week = await planWeek({
+    projections: projectAll(ds, { ...DEFAULT_STRATEGY }),
+    team,
+    criteria: CRITERIA,
+    solve,
+    event: dl.event,
+    maxTransfers: transfersAlreadyDone ? 0 : undefined,
+    now,
+  });
+  if (ds.startEvent !== dl.event) week.notes.push(`Model's next gameweek is ${ds.startEvent}; deadline is GW${dl.event}.`);
 
   // 6. Every FPL rule and guardrail, independently of the planner.
   const d = diffPlan({
@@ -490,7 +286,7 @@ async function main(): Promise<number> {
   d.xpGain = week.transfersUsed ? week.gain : null;
 
   const summary = [
-    `**Rules:** 0 hits · each transfer ≥ +${CONFIG.minGainPerTransfer} xP · within ${CONFIG.windowMaxH}h of deadline · most money within ${CONFIG.bankToleranceXp} xP of best`,
+    `**Rules:** 0 hits · each transfer ≥ +${CRITERIA.minGainPerTransfer} xP · within ${CRITERIA.windowMaxH}h of deadline · most money within ${CRITERIA.bankToleranceXp} xP of best`,
     `**Plan:** ${week.transfersUsed} of ${week.freeTransfers} free transfer(s) · ${week.gain >= 0 ? "+" : ""}${week.gain.toFixed(1)} xP vs rolling · bank ${(week.bankBefore / 10).toFixed(1)}m → ${(week.bankAfter / 10).toFixed(1)}m` +
       (week.bankSavedByTieBreak > 0 ? ` (tie-break kept £${(week.bankSavedByTieBreak / 10).toFixed(1)}m extra)` : ""),
     ...week.notes.map((n) => `- ${n}`),
@@ -511,6 +307,7 @@ async function main(): Promise<number> {
     const r = report("BLOCKED — nothing submitted");
     say(r);
     await notify(r, "BLOCKED");
+    await publish(dl, d, "BLOCKED");
     return 1;
   }
 
@@ -550,6 +347,7 @@ async function main(): Promise<number> {
       `\n\n**Check your team in the FPL app.** Squad matches: ${squadOk} · captain matches: ${captainOk}.`;
     say(r);
     await notify(r, "CHECK TEAM");
+    await publish(dl, d, "CHECK TEAM");
     return 1;
   }
 
@@ -557,9 +355,7 @@ async function main(): Promise<number> {
   const r = report(week.transfersUsed ? `EXECUTED ${week.transfersUsed} transfer(s)` : "ROLLED — lineup set");
   say(r);
   await notify(r, "EXECUTED");
-  if (process.env.AUTOPILOT_PUBLISH_PATH) {
-    await writeFile(process.env.AUTOPILOT_PUBLISH_PATH, JSON.stringify({ ...toProposal(dl, d), verdict: "EXECUTED" }, null, 1) + "\n");
-  }
+  await publish(dl, d, "EXECUTED");
   return 0;
 }
 

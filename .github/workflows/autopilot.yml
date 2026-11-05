@@ -5,6 +5,10 @@
 # scripts/autopick.ts: no points hits ever, a transfer only if it raises
 # expected points, and the most money left among near-best options.
 #
+# CRITERIA live in autopilot/criteria.json — edit that file (on GitHub is fine)
+# to change them. The app's Autopilot tab reads the same file, so its preview
+# matches what runs here.
+#
 # ONE-TIME SETUP (repo → Settings → Secrets and variables → Actions):
 #   Secrets:
 #     FPL_REFRESH_TOKEN  your FPL login token, copied from the browser
@@ -17,8 +21,9 @@
 #     FPL_ENTRY_ID       optional: your team ID (saves one lookup)
 #   Variables:
 #     AUTOPILOT_MODE     "live" to submit. Anything else (or unset) = dry run.
-#     Optional tuning: MIN_GAIN_PER_TRANSFER (default 1.0),
-#     BANK_TOLERANCE_XP (default 2), WINDOW_MAX_H (default 12, max 12).
+#     AUTOPILOT_PUBLISH  optional: "true" commits each live run's result to
+#                        public/data/proposal.json for the app's Autopilot tab.
+#                        Anyone who opens the site can then see your transfers.
 #   Managed by the job itself (don't edit): AUTOPILOT_DONE_EVENT, AUTOPILOT_LAST_HASH.
 #
 # Also: Settings → Actions → General → Workflow permissions → "Read and write",
@@ -47,7 +52,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write   # only used to publish the result when AUTOPILOT_PUBLISH is "true"
 
 jobs:
   autopick:
@@ -71,9 +76,7 @@ jobs:
           NOTIFY_WEBHOOK: ${{ secrets.NOTIFY_WEBHOOK }}
           # A manual "preview" run is always a dry run.
           AUTOPILOT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.preview && 'dry-run' || vars.AUTOPILOT_MODE }}
-          MIN_GAIN_PER_TRANSFER: ${{ vars.MIN_GAIN_PER_TRANSFER }}
-          BANK_TOLERANCE_XP: ${{ vars.BANK_TOLERANCE_XP }}
-          WINDOW_MAX_H: ${{ vars.WINDOW_MAX_H }}
+          AUTOPILOT_PUBLISH_PATH: ${{ vars.AUTOPILOT_PUBLISH == 'true' && 'public/data/proposal.json' || '' }}
           AUTOPILOT_DONE_EVENT: ${{ vars.AUTOPILOT_DONE_EVENT }}
           AUTOPILOT_LAST_HASH: ${{ vars.AUTOPILOT_LAST_HASH }}
           AUTOPILOT_ROTATED_TOKEN_FILE: ${{ runner.temp }}/rotated
@@ -108,6 +111,18 @@ jobs:
             gh variable set AUTOPILOT_LAST_HASH --repo "$R" --body "$(cat "$RUNNER_TEMP/hash")"
           fi
           rm -f "$RUNNER_TEMP/rotated" "$RUNNER_TEMP/state.json"
+
+      # Opt-in. Commits only when there is a new result; the push redeploys the app.
+      - name: Publish result to the app
+        if: always() && vars.AUTOPILOT_PUBLISH == 'true'
+        run: |
+          [ -f public/data/proposal.json ] || exit 0
+          git add public/data/proposal.json
+          git diff --cached --quiet && exit 0
+          git config user.name "fpl-autopilot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "autopilot: GW result"
+          git pull --rebase --autostash origin "$GITHUB_REF_NAME" && git push
 
       - name: Keep the plan and request bodies
         if: always()

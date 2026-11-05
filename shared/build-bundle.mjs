@@ -282,11 +282,18 @@ export function buildBundle(
       scoreA: num(f.team_a_score),
     }));
 
+  // Upcoming deadlines, for the Autopilot tab's countdown and execution window.
+  const deadlines = boot.events
+    .filter((e) => !e.finished && e.deadline_time)
+    .slice(0, 4)
+    .map((e) => ({ event: e.id, deadline: e.deadline_time }));
+
   const bundle = {
     generatedAt,
     season: "2026/27",
     currentEvent: current?.id ?? null,
     nextEvent: next?.id ?? null,
+    deadlines,
     teams,
     players,
     fixtures,
