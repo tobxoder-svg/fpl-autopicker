@@ -1,109 +1,123 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Palette: "Light & Shadow".
-     off-white #EFEEEA · mauve #A994AE · mint #C6E3CC · khaki #D8CF96
-     sky #7DB7DA · taupe #9E9896 · dark taupe #78716B · slate #4D6479
+   Palette: "Phosphor" — a monochrome LCD / terminal readout.
 
-   Light mode: slate carries gains and identity (buttons, bars, accent text);
-   sky is the soft highlight behind it (active nav, selected cards, chips).
-   Dark mode: sky is the accent itself. Mauve is reserved for deductions and is
-   never used as a second series colour. Accent and loss are darkened from the
-   swatches so both read as text (≥ 4.5:1 on every surface).
+   Two tones carry the whole interface: dark olive ink #21301B on pale sage
+   paper #BFCAA8 (both sampled from the reference). Light mode is the LCD
+   itself; dark mode is the same screen with the backlight off — phosphor green
+   on near-black.
 
-   Validated for colour-vision deficiency: the slate/mauve pair separates at
-   deutan ΔE 17.5, protan 12.2 (light); sky/lilac at deutan 20.6, protan 12.2
-   (dark) — above the ΔE 8 target. The four fixture-difficulty tints separate at
-   deutan 18.0, protan 20.7 (they replaced emerald/amber/rose, where the easiest
-   and hardest fixture were deutan ΔE 1.9 apart — indistinguishable).
+   Three rules hold the look together, and all three live in this file:
+     1. Square corners. Every --radius-* token is 0, so rounded-* utilities
+        across the app flatten without touching a single component.
+     2. No shadows. Depth comes from borders and inversion, never from blur.
+     3. One typeface. IBM Plex Mono at every size; the display face is gone.
+
+   Emphasis is inversion, not colour: a selected thing is a solid ink block
+   with paper-coloured text, like the numbered panel in the reference.
+
+   Contrast: ink on paper 8.1:1, inverted 10.0:1, muted 5.1:1, loss 5.3:1;
+   dark mode 11.8 / 11.8 / 5.4 / 7.8. Borders clear 3:1 as UI components.
+
+   NOTE ON ENCODING. A monochrome palette removes hue as a channel, so
+   anything that previously meant something by colour had to be re-encoded:
+     - Fixture difficulty is now four steps of lightness (13.2:1 down to
+       5.5:1 on the card plate). Ordered light-to-dark, which survives every
+       form of colour blindness — there is no hue left to confuse.
+     - Gains vs losses could not go monochrome: a diverging bar in ui.tsx
+       fills positive and negative from --accent and --loss, and equal
+       lightness would erase it. --loss is therefore the one permitted second
+       hue, a muted brick that reads as amber-CRT rather than as a new colour.
+       It separates from ink at deutan dE 23, protan 12, tritan 47.
 --------------------------------------------------------------------------- */
 
 :root {
-  /* Raw swatches, for one-off accents. Prefer the semantic tokens below. */
-  --sw-offwhite: #efeeea;
-  --sw-mauve: #a994ae;
-  --sw-mint: #c6e3cc;
-  --sw-khaki: #d8cf96;
-  --sw-sky: #7db7da;
-  --sw-taupe: #9e9896;
-  --sw-taupe-dark: #78716b;
-  --sw-slate: #4d6479;
+  /* Raw tones, for one-off accents. Prefer the semantic tokens below. */
+  --sw-paper: #bfcaa8;
+  --sw-ink: #21301b;
+  --sw-brick: #733822;
+  --sw-sage: #8a9b6c;
+  --sw-sage-pale: #e2eacd;
 
-  --bg: #efeeea;
-  --surface: #f8f7f4;
-  --surface-2: #f3f2ee;
-  --surface-3: #e6e4df;
-  --border: #e2dfda;
-  --border-strong: #cfcbc5;
-  --ink: #2d2b29;
-  --ink-2: #4a4541;
-  --ink-muted: #5f5954;
-  --accent: #344a5f;
-  --accent-ink: #ffffff;
-  --loss: #80607a;
-  --accent-soft: rgb(125 183 218 / 0.28);
-  --loss-soft: rgb(169 148 174 / 0.2);
-  --shadow: 0 1px 2px rgb(45 43 41 / 0.05), 0 8px 24px -16px rgb(45 43 41 / 0.2);
+  --bg: #bfcaa8;
+  --surface: #c7d1b2;
+  --surface-2: #b4bf9b;
+  --surface-3: #a7b38e;
+  --border: #4a5838;
+  --border-strong: #21301b;
+  --ink: #21301b;
+  --ink-2: #35452b;
+  --ink-muted: #415030;
+  --accent: #21301b;
+  --accent-ink: #d5dec3;
+  --accent-soft: rgb(33 48 27 / 0.16);
+  --loss: #733822;
+  --loss-soft: rgb(115 56 34 / 0.14);
+  --shadow: none;
 
-  /* The pitch is an illustrated ground, not an encoding — it is deliberately
-     outside the chart palette, and nothing on it carries meaning by hue.
-     A muted sage, dark enough for white names (5.0:1). */
-  --turf: #587762;
-  --turf-line: rgb(255 255 255 / 0.05);
-  --bench: #475f4f;
+  /* The pitch is an illustrated ground, not an encoding. Dark olive so the
+     white player names and the fixture tiers below both sit on it. */
+  --turf: #2f3d24;
+  --turf-line: rgb(223 233 201 / 0.07);
+  --bench: #26321d;
 
-  /* Fixture difficulty, as tints over the darkened plate on a player card.
-     Four tiers, so hue is doing the work — these are tuned for separation
-     under deutan/protan, not picked for looks. Same in both themes: the
-     plate they sit on is dark either way. */
-  --fdr-easy: #9fd8ae;
-  --fdr-mid: #eeefec;
-  --fdr-hard: #e0d388;
-  --fdr-worst: #e8bff0;
+  /* Fixture difficulty: four steps of lightness, easiest brightest. */
+  --fdr-easy: #e2eacd;
+  --fdr-mid: #c3d0a6;
+  --fdr-hard: #a4b485;
+  --fdr-worst: #8a9b6c;
+
+  /* The faint graph-paper grid. Sized in ch/px so it reads as a readout
+     rather than as decoration. */
+  --grid-line: rgb(33 48 27 / 0.07);
+  --grid-size: 13px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --turf: #3f5848;
-    --turf-line: rgb(255 255 255 / 0.045);
-    --bench: #33483b;
-    --bg: #1b2027;
-    --surface: #232a32;
-    --surface-2: #2a323b;
-    --surface-3: #333c46;
-    --border: #36404b;
-    --border-strong: #4a5562;
-    --ink: #efeeea;
-    --ink-2: #c9c4bf;
-    --ink-muted: #aba5a2;
-    --accent: #7db7da;
-    --accent-ink: #13232f;
-    --loss: #dcc6e0;
-    --accent-soft: rgb(125 183 218 / 0.18);
-    --loss-soft: rgb(220 198 224 / 0.14);
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 24px -16px rgb(0 0 0 / 0.6);
+    --bg: #0d1309;
+    --surface: #141c0e;
+    --surface-2: #1b2413;
+    --surface-3: #24301a;
+    --border: #566b48;
+    --border-strong: #7e9463;
+    --ink: #c3d3a4;
+    --ink-2: #a3b585;
+    --ink-muted: #7e8f64;
+    --accent: #c3d3a4;
+    --accent-ink: #0d1309;
+    --accent-soft: rgb(195 211 164 / 0.16);
+    --loss: #d89a4e;
+    --loss-soft: rgb(216 154 78 / 0.14);
+    --shadow: none;
+    --turf: #1a240f;
+    --turf-line: rgb(195 211 164 / 0.06);
+    --bench: #141c0b;
+    --grid-line: rgb(195 211 164 / 0.055);
   }
 }
 
 :root[data-theme="dark"] {
-  --turf: #3f5848;
-  --turf-line: rgb(255 255 255 / 0.045);
-  --bench: #33483b;
-  --bg: #1b2027;
-  --surface: #232a32;
-  --surface-2: #2a323b;
-  --surface-3: #333c46;
-  --border: #36404b;
-  --border-strong: #4a5562;
-  --ink: #efeeea;
-  --ink-2: #c9c4bf;
-  --ink-muted: #aba5a2;
-  --accent: #7db7da;
-  --accent-ink: #13232f;
-  --loss: #dcc6e0;
-  --accent-soft: rgb(125 183 218 / 0.18);
-  --loss-soft: rgb(220 198 224 / 0.14);
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 24px -16px rgb(0 0 0 / 0.6);
+  --bg: #0d1309;
+  --surface: #141c0e;
+  --surface-2: #1b2413;
+  --surface-3: #24301a;
+  --border: #566b48;
+  --border-strong: #7e9463;
+  --ink: #c3d3a4;
+  --ink-2: #a3b585;
+  --ink-muted: #7e8f64;
+  --accent: #c3d3a4;
+  --accent-ink: #0d1309;
+  --accent-soft: rgb(195 211 164 / 0.16);
+  --loss: #d89a4e;
+  --loss-soft: rgb(216 154 78 / 0.14);
+  --shadow: none;
+  --turf: #1a240f;
+  --turf-line: rgb(195 211 164 / 0.06);
+  --bench: #141c0b;
+  --grid-line: rgb(195 211 164 / 0.055);
 }
 
 @theme inline {
@@ -122,15 +136,12 @@
   --color-loss: var(--loss);
   --color-loss-soft: var(--loss-soft);
 
-  /* Raw swatches as utilities: bg-sky, bg-mint, text-slate, border-mauve … */
-  --color-offwhite: var(--sw-offwhite);
-  --color-mauve: var(--sw-mauve);
-  --color-mint: var(--sw-mint);
-  --color-khaki: var(--sw-khaki);
-  --color-sky: var(--sw-sky);
-  --color-taupe: var(--sw-taupe);
-  --color-taupe-dark: var(--sw-taupe-dark);
-  --color-slate: var(--sw-slate);
+  /* Raw tones as utilities: bg-paper, text-brick, border-ink … */
+  --color-paper: var(--sw-paper);
+  --color-ink-raw: var(--sw-ink);
+  --color-brick: var(--sw-brick);
+  --color-sage: var(--sw-sage);
+  --color-sage-pale: var(--sw-sage-pale);
 
   /* text-fdr-easy … text-fdr-worst */
   --color-fdr-easy: var(--fdr-easy);
@@ -138,11 +149,23 @@
   --color-fdr-hard: var(--fdr-hard);
   --color-fdr-worst: var(--fdr-worst);
 
-  --font-display: "Familjen Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* One typeface everywhere. Display and sans both resolve to the mono so
+     existing font-display / font-sans utilities need no editing. */
+  --font-display: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --shadow-card: var(--shadow);
+  /* Square everything. This is what flattens rounded-* app-wide. */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
+
+  --shadow-card: none;
 }
 
 @layer base {
@@ -153,7 +176,12 @@
   :root[data-theme="dark"] { color-scheme: dark; }
 
   body {
-    background: var(--bg);
+    background-color: var(--bg);
+    /* Graph-paper grid, fixed so it reads as the screen rather than the page. */
+    background-image:
+      repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px var(--grid-size)),
+      repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px var(--grid-size));
+    background-attachment: fixed;
     color: var(--ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -162,36 +190,63 @@
 
   h1, h2, h3, h4 {
     font-family: var(--font-display);
+    font-weight: 700;
     text-wrap: balance;
+    /* Mono is already wide; negative tracking would close the terminal feel. */
+    letter-spacing: -0.01em;
+  }
+
+  h1 {
     letter-spacing: -0.02em;
   }
 
+  /* A caret-style focus ring, square like everything else. */
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    border-radius: 3px;
+    border-radius: 0;
   }
 
   ::selection {
-    background: var(--accent-soft);
+    background: var(--accent);
+    color: var(--accent-ink);
   }
 }
 
 @layer utilities {
   .tnum { font-variant-numeric: tabular-nums; }
+
   .eyebrow {
     font-family: var(--font-mono);
     font-size: 10.5px;
-    letter-spacing: 0.11em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--ink-muted);
   }
+
+  /* Cards are a hard-ruled box on the same paper — no fill lift, no blur. */
   .card {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: var(--shadow);
+    border: 1.5px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
   }
+
+  /* An inverted block: the reference's selected row and section chips. */
+  .invert {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: 1.5px solid var(--accent);
+  }
+  .invert .eyebrow,
+  .invert .text-ink-muted { color: inherit; opacity: 0.75; }
+
+  /* A dotted rule, as under RIWAYAT in the reference. */
+  .rule-dotted {
+    border: 0;
+    border-top: 2px dotted var(--border);
+  }
+
   .scroll-x { overflow-x: auto; overscroll-behavior-x: contain; }
 
   /* Mown stripes. Subtle enough to read as turf, not as a data encoding. */
@@ -206,7 +261,16 @@
   .pitch-bench { background-color: var(--bench); }
 }
 
-/* Range inputs get no useful default styling in any browser. */
+/* Tailwind's bare `rounded` and `rounded-full` are fixed values rather than
+   token-driven, so zeroing --radius-* above does not reach them. Flatten both
+   here. Unlayered rules outrank the utilities layer, so no !important needed. */
+.rounded,
+.rounded-full {
+  border-radius: 0;
+}
+
+/* Range inputs get no useful default styling in any browser. Square slider,
+   square thumb — a hardware fader rather than a pill. */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -216,21 +280,23 @@ input[type="range"] {
   cursor: pointer;
 }
 input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px; border-radius: 2px; background: var(--surface-3);
+  height: 4px; border-radius: 0; background: var(--surface-3);
+  border: 1px solid var(--border);
 }
 input[type="range"]::-moz-range-track {
-  height: 4px; border-radius: 2px; background: var(--surface-3);
+  height: 4px; border-radius: 0; background: var(--surface-3);
+  border: 1px solid var(--border);
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 15px; height: 15px; margin-top: -5.5px;
-  border-radius: 50%; background: var(--accent);
-  border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border-strong);
+  width: 13px; height: 15px; margin-top: -6.5px;
+  border-radius: 0; background: var(--accent);
+  border: 2px solid var(--bg); box-shadow: 0 0 0 1.5px var(--border-strong);
 }
 input[type="range"]::-moz-range-thumb {
-  width: 15px; height: 15px;
-  border-radius: 50%; background: var(--accent);
-  border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border-strong);
+  width: 13px; height: 15px;
+  border-radius: 0; background: var(--accent);
+  border: 2px solid var(--bg); box-shadow: 0 0 0 1.5px var(--border-strong);
 }
 
 @media (prefers-reduced-motion: reduce) {

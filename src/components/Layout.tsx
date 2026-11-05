@@ -71,7 +71,7 @@ function ThemeToggle() {
     <div
       role="radiogroup"
       aria-label="Colour theme"
-      className="flex items-center gap-0.5 rounded-lg border border-line-strong bg-surface-2 p-0.5"
+      className="flex items-center gap-0.5 border border-accent-ink/40 p-0.5"
     >
       {THEME_OPTIONS.map((opt) => {
         const active = theme === opt.value;
@@ -84,7 +84,7 @@ function ThemeToggle() {
             title={`${opt.label} theme`}
             onClick={() => setTheme(opt.value)}
             className={[
-              "relative flex items-center gap-1.5 rounded-md font-mono text-[11px]",
+              "relative flex items-center gap-1.5 font-mono text-[11px]",
               "uppercase tracking-wide transition-colors",
               // Roomy enough to hit with a thumb on a phone; tightens up once
               // the labels appear and a mouse is the likely input.
@@ -95,8 +95,8 @@ function ThemeToggle() {
               // horizontally.
               "after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-['']",
               active
-                ? "bg-accent text-accent-ink"
-                : "text-ink-muted hover:bg-surface-3 hover:text-ink",
+                ? "bg-accent-ink text-accent"
+                : "text-accent-ink/70 hover:bg-accent-ink/15 hover:text-accent-ink",
             ].join(" ")}
           >
             <svg
@@ -196,7 +196,7 @@ function BottomNav() {
   return (
     <nav
       aria-label="Main"
-      className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t border-line bg-surface/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom)]"
+      className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t-2 border-line-strong bg-accent text-accent-ink pb-[env(safe-area-inset-bottom)]"
     >
       <div className="grid grid-cols-6">
         {NAV.map((item) => (
@@ -206,14 +206,15 @@ function BottomNav() {
             end={item.to === "/"}
             className={({ isActive }) =>
               [
-                "flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-[10.5px] font-medium transition-colors",
-                isActive ? "text-accent" : "text-ink-muted",
+                "flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-[10px] font-medium",
+                "uppercase tracking-[0.06em] transition-colors",
+                isActive ? "text-accent-ink" : "text-accent-ink/60",
               ].join(" ")
             }
           >
             {({ isActive }) => (
               <>
-                <span className={`px-3 py-1 rounded-full ${isActive ? "bg-accent-soft" : ""}`}>
+                <span className={`px-3 py-1 ${isActive ? "bg-accent-ink text-accent" : ""}`}>
                   <svg viewBox="0 0 24 24" aria-hidden className="w-[21px] h-[21px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     {item.icon}
                   </svg>
@@ -235,8 +236,11 @@ function Tab({ to, children }: { to: string; children: React.ReactNode }) {
       end={to === "/"}
       className={({ isActive }) =>
         [
-          "px-2 sm:px-3 py-1.5 rounded text-[13px] sm:text-[13.5px] font-medium transition-colors whitespace-nowrap",
-          isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:text-ink hover:bg-surface-2",
+          "px-2 sm:px-2.5 py-1.5 text-[11.5px] sm:text-[12px] font-medium uppercase",
+          "tracking-[0.07em] transition-colors whitespace-nowrap",
+          isActive
+            ? "bg-accent-ink text-accent"
+            : "text-accent-ink/70 hover:bg-accent-ink/15 hover:text-accent-ink",
         ].join(" ")
       }
     >
@@ -249,16 +253,19 @@ export default function Layout() {
   const [installPrompt, install] = useInstallPrompt();
   return (
     <div className="min-h-dvh flex flex-col">
-      <header className="border-b border-line bg-surface/80 backdrop-blur-sm sticky top-0 z-30">
+      {/* The reference's menu strip: a solid ink bar, inverted against the
+          page. In dark mode the tokens flip, so it becomes a pale bar with
+          dark text — the same inversion, read off the other side of the LCD. */}
+      <header className="border-b-2 border-line-strong bg-accent text-accent-ink sticky top-0 z-30">
         <div className="max-w-[1180px] mx-auto px-4 sm:px-5 h-14 flex items-center gap-1.5 sm:gap-4">
           <NavLink to="/" className="flex items-center gap-2.5 sm:mr-2 shrink-0">
             <span
               aria-hidden
-              className="w-6 h-6 rounded-md bg-accent text-accent-ink grid place-items-center font-display font-bold text-[12px] leading-none"
+              className="w-6 h-6 bg-accent-ink text-accent grid place-items-center font-display font-bold text-[12px] leading-none"
             >
               FD
             </span>
-            <span className="sm:hidden lg:inline font-display font-semibold text-[15.5px] tracking-tight">
+            <span className="sm:hidden lg:inline font-display font-semibold text-[14px] uppercase tracking-[0.1em]">
               Fantasy Drafter
             </span>
           </NavLink>
@@ -276,7 +283,7 @@ export default function Layout() {
               <button
                 type="button"
                 onClick={install}
-                className="font-mono text-[11px] tracking-wide uppercase bg-accent text-accent-ink rounded px-2.5 py-1.5 hover:opacity-90"
+                className="font-mono text-[11px] tracking-wide uppercase bg-accent-ink text-accent px-2.5 py-1.5 hover:opacity-90"
               >
                 Install
               </button>
@@ -285,7 +292,7 @@ export default function Layout() {
               href={REPO}
               target="_blank"
               rel="noreferrer noopener"
-              className="hidden lg:inline font-mono text-[11px] tracking-wide uppercase text-ink-2 border border-line-strong rounded px-2.5 py-1.5 hover:bg-surface-2 hover:text-ink transition-colors"
+              className="hidden lg:inline font-mono text-[11px] tracking-wide uppercase text-accent-ink/80 border border-accent-ink/40 px-2.5 py-1.5 hover:bg-accent-ink hover:text-accent transition-colors"
             >
               Source
             </a>

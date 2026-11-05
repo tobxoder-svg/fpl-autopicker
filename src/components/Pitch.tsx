@@ -110,7 +110,7 @@ function PlayerCard({
       <span
         className={[
           "absolute -top-1 left-0 z-10 font-mono text-[9px] sm:text-[10px] font-semibold tnum",
-          "px-1 sm:px-1.5 py-[1px] rounded-[3px] shadow-sm",
+          "px-1 sm:px-1.5 py-[1px] shadow-sm",
           "bg-[var(--surface)] text-[var(--ink)] border border-black/10",
         ].join(" ")}
       >
@@ -149,7 +149,7 @@ function PlayerCard({
 
       <div
         className={[
-          "w-full -mt-1 rounded-[3px] text-center overflow-hidden shadow-sm",
+          "w-full -mt-1 text-center overflow-hidden shadow-sm",
           isSelected ? "ring-2 ring-[var(--accent)]" : "",
           dragState === "over" ? "ring-2 ring-white" : "",
         ].join(" ")}

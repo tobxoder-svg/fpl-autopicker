@@ -85,7 +85,7 @@ export function Chip({
   };
   return (
     <span
-      className={`font-mono text-[10.5px] tracking-[0.09em] uppercase px-2 py-[3px] rounded-[3px] border whitespace-nowrap ${tones[tone]}`}
+      className={`font-mono text-[10.5px] tracking-[0.09em] uppercase px-2 py-[3px] border whitespace-nowrap ${tones[tone]}`}
     >
       {children}
     </span>
@@ -119,7 +119,7 @@ export function Waterfall({ items, total }: { items: Array<[string, number]>; to
             <div className="text-[11.5px] text-ink-2 text-right leading-tight">{label}</div>
             <div className="relative h-[17px]" title={`${label}: ${pos ? "+" : "−"}${Math.abs(v).toFixed(2)} → ${tops[i].toFixed(2)}`}>
               <i
-                className={`absolute top-0.5 h-[13px] rounded-[2px] block ${pos ? "bg-accent" : "bg-loss"}`}
+                className={`absolute top-0.5 h-[13px] block ${pos ? "bg-accent" : "bg-loss"}`}
                 style={{
                   left: `${((lo / scaleMax) * 100).toFixed(2)}%`,
                   width: `${Math.max(0.5, ((hi - lo) / scaleMax) * 100).toFixed(2)}%`,
@@ -137,7 +137,7 @@ export function Waterfall({ items, total }: { items: Array<[string, number]>; to
       <div className="text-[11.5px] font-semibold text-right">Total xP</div>
       <div className="relative h-[17px]">
         <i
-          className="absolute top-0.5 h-[13px] rounded-[2px] block bg-[var(--ink-2)]"
+          className="absolute top-0.5 h-[13px] block bg-[var(--ink-2)]"
           style={{ left: 0, width: `${((total / scaleMax) * 100).toFixed(2)}%` }}
         />
       </div>
