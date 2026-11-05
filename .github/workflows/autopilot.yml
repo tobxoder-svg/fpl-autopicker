@@ -4,6 +4,9 @@
 # at most once per gameweek, and follows the owner's rules in
 # scripts/autopick.ts: no points hits ever, a transfer only if it raises
 # expected points, and the most money left among near-best options.
+# It also picks the captain (model + bookmaker odds + FPL projection + form),
+# plays Triple Captain / Bench Boost when the week is right, and suggests
+# Wildcard / Free Hit in a heads-up alert ~36h before the deadline.
 #
 # CRITERIA live in autopilot/criteria.json — edit that file (on GitHub is fine)
 # to change them. The app's Autopilot tab reads the same file, so its preview
@@ -19,6 +22,9 @@
 #                        save the new one. Without it the job locks itself out.
 #     NOTIFY_WEBHOOK     optional: https://ntfy.sh/<your-topic> for phone alerts
 #     FPL_ENTRY_ID       optional: your team ID (saves one lookup)
+#     ODDS_API_KEY       optional: free key from the-odds-api.com, for the captain
+#                        pick. Without it the captain uses the model, FPL's
+#                        projection and form only.
 #   Variables:
 #     AUTOPILOT_MODE     "live" to submit. Anything else (or unset) = dry run.
 #     AUTOPILOT_PUBLISH  optional: "true" commits each live run's result to
@@ -74,6 +80,7 @@ jobs:
           FPL_REFRESH_TOKEN: ${{ secrets.FPL_REFRESH_TOKEN }}
           FPL_ENTRY_ID: ${{ secrets.FPL_ENTRY_ID }}
           NOTIFY_WEBHOOK: ${{ secrets.NOTIFY_WEBHOOK }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           # A manual "preview" run is always a dry run.
           AUTOPILOT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.preview && 'dry-run' || vars.AUTOPILOT_MODE }}
           AUTOPILOT_PUBLISH_PATH: ${{ vars.AUTOPILOT_PUBLISH == 'true' && 'public/data/proposal.json' || '' }}

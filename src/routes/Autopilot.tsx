@@ -23,6 +23,10 @@ import {
   type SolveFn,
   type WeekPlan,
 } from "../lib/autoplan";
+import { finishWeek, type WeekExtras } from "../lib/weekly";
+import { CHIP_LABEL, chipGains, chipWindows, statesFromHistory, type ChipRow } from "../lib/chips";
+import { oddsIndex, type OddsSnapshot } from "../lib/odds";
+import type { CaptainRow } from "../lib/captain";
 import savedCriteriaFile from "../../autopilot/criteria.json";
 
 const REPO = "https://github.com/tobxoder-svg/fpl-autopicker";
@@ -66,6 +70,9 @@ interface Who {
   club?: string;
 }
 interface Proposal {
+  chip?: string | null;
+  chipsSuggested?: string[];
+  captainPick?: Array<{ id: number; name: string; mean: number; reasons: string[] }>;
   version: number;
   generatedAt: string;
   event: number;
@@ -77,6 +84,24 @@ interface Proposal {
   xpGain: number | null;
   lineup: { captain: { from: Who | null; to: Who } | null; vice: { from: Who | null; to: Who } | null; benchOrder: Who[] };
   checks: Array<{ level: "ok" | "warn" | "fail"; msg: string }>;
+}
+
+/** Bookmaker odds snapshot from the data-refresh job (absent without ODDS_API_KEY). */
+function useOdds(nonce: number): OddsSnapshot | null {
+  const [o, setO] = useState<OddsSnapshot | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${import.meta.env.BASE_URL}data/odds.json`, { cache: "no-cache" })
+      .then(async (res) => {
+        const isJson = (res.headers.get("content-type") ?? "").includes("json");
+        if (!cancelled && res.ok && isJson) setO((await res.json()) as OddsSnapshot);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [nonce]);
+  return o;
 }
 
 function useLastRun(): Proposal | null {
@@ -145,6 +170,7 @@ export default function Autopilot() {
   // ---- criteria: saved (what runs) vs what-if (what you're trying)
   const [criteria, setCriteria] = useState<AutoCriteria>(SAVED);
   const isSaved = sameCriteria(criteria, SAVED);
+  const set = (patch: Partial<AutoCriteria>) => setCriteria((c) => normaliseCriteria({ ...c, ...patch }));
   const win = deadline ? windowState(deadline.at, criteria, now) : null;
   const savedWin = deadline ? windowState(deadline.at, SAVED, now) : null;
 
@@ -218,6 +244,41 @@ export default function Autopilot() {
   // Instant rule-1 view while the money stage solves.
   const scored = useMemo(() => (curve ? scoreCurve(curve, criteria) : null), [curve, criteria]);
 
+  // ---- phase 3: captain and chips
+  const odds = useOdds(teamNonce);
+  const lookupOdds = useMemo(() => oddsIndex(odds), [odds]);
+  const chipStates = useMemo(() => {
+    if (!dataset || !loaded || !plan) return null;
+    return statesFromHistory(chipWindows(dataset.bundle.chips), loaded.entry.chipsUsed ?? [], plan.event);
+  }, [dataset, loaded, plan]);
+  // Free Hit / Wildcard need solves: once per plan, not per slider move.
+  const [gainsFor, setGainsFor] = useState<{ plan: WeekPlan; fhGain: number | null; wcGain: number | null } | null>(null);
+  useEffect(() => {
+    if (!ctx || !plan || !chipStates) return;
+    const fh = chipStates.some((c) => c.name === "freehit" && c.available);
+    const wc = chipStates.some((c) => c.name === "wildcard" && c.available);
+    let cancelled = false;
+    chipGains({ ctx, plan, solve: browserSolve, freehit: fh, wildcard: wc })
+      .then((g) => !cancelled && setGainsFor({ plan, ...g }))
+      .catch(() => !cancelled && setGainsFor({ plan, fhGain: null, wcGain: null }));
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx, plan, chipStates]);
+  const [week, setWeek] = useState<{ plan: WeekPlan; extras: WeekExtras } | null>(null);
+  useEffect(() => {
+    if (!dataset || !ctx || !plan || !chipStates) return;
+    const gains = gainsFor && gainsFor.plan === plan ? { fhGain: gainsFor.fhGain, wcGain: gainsFor.wcGain } : { fhGain: null, wcGain: null };
+    let cancelled = false;
+    finishWeek({ ds: dataset, ctx, plan, criteria, states: chipStates, odds: lookupOdds, gains })
+      .then((w) => !cancelled && setWeek(w))
+      .catch((err: Error) => !cancelled && setSolveError(err.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [dataset, ctx, plan, criteria, chipStates, lookupOdds, gainsFor]);
+  const shown = week && plan && week.plan.event === plan.event ? week : null;
+
   const refresh = useCallback(async () => {
     setRefreshing(true);
     await refreshDataset();
@@ -249,7 +310,7 @@ export default function Autopilot() {
       {data.status === "error" && <p className="text-loss">{data.message}</p>}
 
       {dataset && (
-        <div className="grid gap-4">
+        <div className="grid gap-4 [&>*]:min-w-0">
           {/* ------------------------------------------------------ this week */}
           <Card className="p-4">
             <div className="flex items-baseline gap-2 flex-wrap">
@@ -332,7 +393,7 @@ export default function Autopilot() {
                   {!plan && !ctxError && !solveError && (
                     <p className="text-[13px] text-ink-2">Working out the best move for 0–{ft} transfers…</p>
                   )}
-                  {plan && <PlanView plan={plan} name={name} club={club} dim={planBusy} />}
+                  {plan && <PlanView plan={shown?.plan ?? plan} name={name} club={club} dim={planBusy} />}
 
                   <hr className="rule-dotted my-3" />
                   <p className="text-[11.5px] text-ink-muted">
@@ -375,13 +436,60 @@ export default function Autopilot() {
             </Card>
           )}
 
+          {/* --------------------------------------------------------- captain */}
+          {shown && (
+            <Card className="p-4">
+              <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                <span className="eyebrow">Captain</span>
+                {shown.plan.plan.chip === "3xc" && <Chip tone="accent">Triple Captain</Chip>}
+              </div>
+              <p className="text-[12.5px] text-ink-2 mb-3">
+                Our model{shown.extras.oddsUsed ? <>, blended {Math.round(criteria.oddsWeight * 100)}% with bookmaker odds</> : null},
+                then {Math.round(criteria.fplEpWeight * 100)}% FPL's projection and {Math.round(criteria.formWeight * 100)}% form.
+                Flagged players can't captain. Style: {styleLabel(criteria.captainDifferential)}.
+              </p>
+              <CaptainTable rows={shown.extras.captains} captain={shown.plan.captain} vice={shown.plan.vice} />
+              <p className="text-[11.5px] text-ink-muted mt-3">
+                {odds
+                  ? `Odds from ${new Date(odds.fetchedAt).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}${shown.extras.oddsUsed ? "" : " — none for this gameweek's matches yet"}. The autopilot refreshes them when it runs.`
+                  : "No bookmaker odds yet — add the ODDS_API_KEY secret (free at the-odds-api.com) and they appear after the next data refresh. Until then: model, FPL projection and form."}
+              </p>
+            </Card>
+          )}
+
+          {/* ----------------------------------------------------------- chips */}
+          {shown && (
+            <Card className="p-4">
+              <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                <span className="eyebrow">Chips</span>
+                {shown.extras.chips.play ? <Chip tone="accent">plays {CHIP_LABEL[shown.extras.chips.play]}</Chip> : <Chip>no chip this week</Chip>}
+                {shown.extras.chips.forced && <Chip tone="loss">use it or lose it</Chip>}
+              </div>
+              <p className="text-[12.5px] text-ink-2 mb-3">
+                Triple Captain and Bench Boost: played by the autopilot when this week beats the rest of
+                the window. Wildcard and Free Hit: suggested only — you play them in the FPL app, and the
+                autopilot then leaves that week to you.
+              </p>
+              <ChipList rows={shown.extras.chips.rows} />
+              {shown.extras.chips.suggest.length > 0 && (
+                <p className={`${INV} text-[12.5px] mt-3 px-3 py-2`}>
+                  Suggested for you: <b className="font-semibold">{shown.extras.chips.suggest.map((c) => CHIP_LABEL[c]).join(", ")}</b>.
+                  Play it in the FPL app before the window opens. You'll also get this in the heads-up alert ~{criteria.alertLeadH}h before the deadline.
+                </p>
+              )}
+              <p className="text-[11.5px] text-ink-muted mt-3">
+                Chips used are read from your public history; windows {dataset.bundle.chips?.length ? "from FPL" : "GW1–19 and GW20–38"}. Later weeks are valued with today's squad.
+              </p>
+            </Card>
+          )}
+
           {/* -------------------------------------------------------- criteria */}
           <Card className="p-4">
             <div className="flex items-center gap-2 flex-wrap mb-3">
               <span className="eyebrow">Criteria</span>
               {isSaved ? <Chip>saved · will run</Chip> : <Chip tone="loss">what-if · not saved</Chip>}
             </div>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <CriteriaGroup title="Transfers">
               <Slider
                 id="c-gain"
                 label="Each transfer must add"
@@ -389,7 +497,7 @@ export default function Autopilot() {
                 {...CRITERIA_LIMITS.minGainPerTransfer}
                 display={`${criteria.minGainPerTransfer.toFixed(1)} xP`}
                 scale={["more moves", "fewer moves"]}
-                onChange={(v) => setCriteria((c) => normaliseCriteria({ ...c, minGainPerTransfer: v }))}
+                onChange={(v) => set({ minGainPerTransfer: v })}
               />
               <Slider
                 id="c-bank"
@@ -398,7 +506,7 @@ export default function Autopilot() {
                 {...CRITERIA_LIMITS.bankToleranceXp}
                 display={`${criteria.bankToleranceXp.toFixed(1)} xP`}
                 scale={["points first", "money first"]}
-                onChange={(v) => setCriteria((c) => normaliseCriteria({ ...c, bankToleranceXp: v }))}
+                onChange={(v) => set({ bankToleranceXp: v })}
               />
               <Slider
                 id="c-window"
@@ -407,12 +515,109 @@ export default function Autopilot() {
                 {...CRITERIA_LIMITS.windowMaxH}
                 display={`${criteria.windowMaxH}h of deadline`}
                 scale={["later", `${HARD_WINDOW_CAP_H}h max`]}
-                onChange={(v) => setCriteria((c) => normaliseCriteria({ ...c, windowMaxH: v }))}
+                onChange={(v) => set({ windowMaxH: v })}
               />
-            </div>
+              <Slider
+                id="c-alert"
+                label="Heads-up alert"
+                value={criteria.alertLeadH}
+                {...CRITERIA_LIMITS.alertLeadH}
+                display={`${criteria.alertLeadH}h before`}
+                scale={["later", "earlier"]}
+                onChange={(v) => set({ alertLeadH: v })}
+              />
+            </CriteriaGroup>
+            <CriteriaGroup title="Captain">
+              <Slider
+                id="c-odds"
+                label="Bookmaker odds"
+                value={criteria.oddsWeight}
+                {...CRITERIA_LIMITS.oddsWeight}
+                display={`${Math.round(criteria.oddsWeight * 100)}%`}
+                scale={["our model", "the market"]}
+                onChange={(v) => set({ oddsWeight: v })}
+              />
+              <Slider
+                id="c-ep"
+                label="FPL's projection"
+                value={criteria.fplEpWeight}
+                {...CRITERIA_LIMITS.fplEpWeight}
+                display={`${Math.round(criteria.fplEpWeight * 100)}%`}
+                scale={["ignore", "lean on it"]}
+                onChange={(v) => set({ fplEpWeight: v })}
+              />
+              <Slider
+                id="c-form"
+                label="Recent form"
+                value={criteria.formWeight}
+                {...CRITERIA_LIMITS.formWeight}
+                display={`${Math.round(criteria.formWeight * 100)}%`}
+                scale={["ignore", "lean on it"]}
+                onChange={(v) => set({ formWeight: v })}
+              />
+              <Slider
+                id="c-style"
+                label="Style"
+                value={criteria.captainDifferential}
+                {...CRITERIA_LIMITS.captainDifferential}
+                display={styleLabel(criteria.captainDifferential)}
+                scale={["safe · template", "differential"]}
+                onChange={(v) => set({ captainDifferential: v })}
+              />
+            </CriteriaGroup>
+            <CriteriaGroup title="Chips">
+              <Toggle id="c-tc" label="Triple Captain" on={criteria.autoTripleCaptain} onChange={(v) => set({ autoTripleCaptain: v })} />
+              <Toggle id="c-bb" label="Bench Boost" on={criteria.autoBenchBoost} onChange={(v) => set({ autoBenchBoost: v })} />
+              <Slider
+                id="c-tcmin"
+                label="Triple Captain when captain ≥"
+                value={criteria.tcMinXp}
+                {...CRITERIA_LIMITS.tcMinXp}
+                display={`${criteria.tcMinXp.toFixed(1)} xP`}
+                scale={["sooner", "only big weeks"]}
+                onChange={(v) => set({ tcMinXp: v })}
+              />
+              <Slider
+                id="c-bbmin"
+                label="Bench Boost when bench ≥"
+                value={criteria.bbMinXp}
+                {...CRITERIA_LIMITS.bbMinXp}
+                display={`${criteria.bbMinXp.toFixed(1)} xP`}
+                scale={["sooner", "only big weeks"]}
+                onChange={(v) => set({ bbMinXp: v })}
+              />
+              <Slider
+                id="c-wait"
+                label="Wait for a week that's better by"
+                value={criteria.chipWaitMarginPct}
+                {...CRITERIA_LIMITS.chipWaitMarginPct}
+                display={`${criteria.chipWaitMarginPct}%`}
+                scale={["play now", "hold out"]}
+                onChange={(v) => set({ chipWaitMarginPct: v })}
+              />
+              <Slider
+                id="c-fh"
+                label="Suggest Free Hit at"
+                value={criteria.fhMinGain}
+                {...CRITERIA_LIMITS.fhMinGain}
+                display={`+${criteria.fhMinGain} xP`}
+                scale={["often", "rarely"]}
+                onChange={(v) => set({ fhMinGain: v })}
+              />
+              <Slider
+                id="c-wc"
+                label="Suggest Wildcard at"
+                value={criteria.wcMinGain}
+                {...CRITERIA_LIMITS.wcMinGain}
+                display={`+${criteria.wcMinGain} xP`}
+                scale={["often", "rarely"]}
+                onChange={(v) => set({ wcMinGain: v })}
+              />
+            </CriteriaGroup>
             <p className="text-[11.5px] text-ink-muted mt-3">
               Fixed in code whatever you set: never a points hit, never more than {HARD_WINDOW_CAP_H}h before
-              the deadline, and it stops {criteria.windowMinH}h before so it never races the lock.
+              the deadline, it stops {criteria.windowMinH}h before so it never races the lock, one chip per
+              gameweek, and it never plays a Wildcard or Free Hit.
             </p>
             {!isSaved && (
               <CriteriaActions criteria={criteria} onReset={() => setCriteria(SAVED)} />
@@ -599,6 +804,11 @@ function PlanView({
         {plan.transfersUsed === 0
           ? "Roll — save the free transfer"
           : `${plan.transfersUsed} transfer${plan.transfersUsed > 1 ? "s" : ""} · ${signed(plan.gain)} xP`}
+        {plan.plan.chip && (
+          <span className={`${INV} ml-2 px-1.5 text-[12px] tracking-[0.12em] uppercase align-middle`}>
+            + {CHIP_LABEL[plan.plan.chip as keyof typeof CHIP_LABEL] ?? plan.plan.chip}
+          </span>
+        )}
       </div>
       <p className="text-[12.5px] text-ink-2 mt-1">
         {plan.transfersUsed === 0
@@ -633,7 +843,7 @@ function PlanView({
       <dl className="mt-3 grid grid-cols-2 sm:grid-cols-4 border-[1.5px] border-line">
         <Stat label="Bank" value={`${money(plan.bankBefore)} → ${money(plan.bankAfter)}`} />
         <Stat label="vs rolling" value={`${signed(plan.gain)} xP`} />
-        <Stat label="Captain" value={name(plan.captain)} />
+        <Stat label={plan.plan.chip === "3xc" ? "Captain ×3" : "Captain"} value={name(plan.captain)} />
         <Stat label="Vice" value={name(plan.vice)} />
       </dl>
     </div>
@@ -696,8 +906,7 @@ function CriteriaActions({ criteria, onReset }: { criteria: AutoCriteria; onRese
   return (
     <div className="mt-3 border-[1.5px] border-line p-3 grid gap-2">
       <p className="text-[12.5px] text-ink-2">
-        The autopilot still runs with the saved settings ({SAVED.minGainPerTransfer} xP ·{" "}
-        {SAVED.bankToleranceXp} xP · {SAVED.windowMaxH}h). To make these stick: copy them, open
+        The autopilot still runs with the saved settings. To make these stick: copy them, open
         criteria.json on GitHub, select everything, paste, and commit. The next hourly run uses them.
       </p>
       <div className="flex gap-2 flex-wrap">
@@ -749,12 +958,153 @@ function LastRun({ p }: { p: Proposal }) {
       ) : (
         <p className="text-[13px]">No transfers — rolled.</p>
       )}
+      {p.chip && (
+        <p className="text-[12.5px]">
+          Chip played: <b className="font-semibold">{CHIP_LABEL[p.chip as keyof typeof CHIP_LABEL] ?? p.chip}</b>
+        </p>
+      )}
+      {p.chipsSuggested && p.chipsSuggested.length > 0 && (
+        <p className="text-[12.5px] text-ink-2">
+          Suggested to you: {p.chipsSuggested.map((c) => CHIP_LABEL[c as keyof typeof CHIP_LABEL] ?? c).join(", ")}
+        </p>
+      )}
       {p.lineup.captain && (
         <p className="text-[12.5px] text-ink-2">
           Captain <b className="font-semibold">{p.lineup.captain.to.name}</b>
           {p.lineup.vice && <> · vice {p.lineup.vice.to.name}</>} · bank after {money(p.bankAfter)}
         </p>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Captain and chips
+// ---------------------------------------------------------------------------
+
+function styleLabel(d: number): string {
+  if (d <= -0.6) return "safe";
+  if (d < -0.15) return "leans safe";
+  if (d <= 0.15) return "neutral";
+  if (d < 0.6) return "leans differential";
+  return "differential";
+}
+
+const f1 = (n: number | null) => (n == null ? "—" : n.toFixed(1));
+
+function CaptainTable({ rows, captain, vice }: { rows: CaptainRow[]; captain: number; vice: number }) {
+  const top = rows.filter((r) => r.eligible).slice(0, 6);
+  const out = rows.filter((r) => !r.eligible);
+  const chosen = rows.find((r) => r.id === captain);
+  return (
+    <>
+      <div className="scroll-x">
+        <table className="w-full text-[12.5px] tnum border-collapse min-w-[460px]">
+          <thead>
+            <tr className="text-left eyebrow">
+              <th className="font-normal py-1 pr-2">Player</th>
+              <th className="font-normal py-1 pr-2">Game</th>
+              <th className="font-normal py-1 pr-2 text-right">Model</th>
+              <th className="font-normal py-1 pr-2 text-right">+Odds</th>
+              <th className="font-normal py-1 pr-2 text-right">FPL</th>
+              <th className="font-normal py-1 pr-2 text-right">Form</th>
+              <th className="font-normal py-1 pr-2 text-right">Own</th>
+              <th className="font-normal py-1 text-right">Blend</th>
+            </tr>
+          </thead>
+          <tbody>
+            {top.map((r) => (
+              <tr key={r.id} className={r.id === captain ? INV : "border-t border-line"}>
+                <td className="py-1.5 px-1 whitespace-nowrap">
+                  {r.name}
+                  {r.id === captain && <span className="ml-1.5 text-[10px] tracking-[0.12em] uppercase">◂ C</span>}
+                  {r.id === vice && <span className="ml-1.5 text-[10px] tracking-[0.12em] uppercase text-ink-muted">V</span>}
+                </td>
+                <td className="py-1.5 pr-2 whitespace-nowrap">{r.fixtures.join(" + ")}</td>
+                <td className="py-1.5 pr-2 text-right">{f1(r.model)}</td>
+                <td className="py-1.5 pr-2 text-right">{f1(r.withOdds)}</td>
+                <td className="py-1.5 pr-2 text-right">{f1(r.ep)}</td>
+                <td className="py-1.5 pr-2 text-right">{f1(r.form)}</td>
+                <td className="py-1.5 pr-2 text-right">{r.ownership.toFixed(0)}%</td>
+                <td className="py-1.5 px-1 text-right font-semibold">{r.mean.toFixed(1)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {chosen && chosen.reasons.length > 0 && (
+        <p className="text-[12.5px] text-ink-2 mt-2">
+          <b className="font-semibold text-ink">{chosen.name}:</b> {chosen.reasons.join(" · ")}
+        </p>
+      )}
+      {out.length > 0 && (
+        <p className="text-[11.5px] text-ink-muted mt-1">
+          Can't captain: {out.map((r) => `${r.name} (${r.reasons[0] ?? "flagged"})`).join(", ")}
+        </p>
+      )}
+    </>
+  );
+}
+
+const DECISION_COPY: Record<ChipRow["decision"], string> = {
+  play: "plays now",
+  suggest: "suggested",
+  hold: "hold",
+  off: "off",
+  unavailable: "—",
+  active: "on",
+};
+
+function ChipList({ rows }: { rows: ChipRow[] }) {
+  return (
+    <ul className="grid">
+      {rows.map((r) => {
+        const hot = r.decision === "play" || r.decision === "suggest" || r.decision === "active";
+        return (
+          <li key={r.name} className="grid grid-cols-[7.5rem_1fr_auto] gap-x-2 items-baseline py-2 border-t border-line first:border-t-0 text-[13px]">
+            <span className="font-semibold">{r.label}</span>
+            <span className="text-[12px] text-ink-2 min-w-0">
+              {r.why}
+              {r.state.available && r.gwsLeft > 0 && (
+                <span className="text-ink-muted"> · {r.gwsLeft} GW{r.gwsLeft > 1 ? "s" : ""} left in window</span>
+              )}
+            </span>
+            <span className={`${hot ? INV : "border border-line-strong text-ink-2"} px-1.5 py-[2px] text-[10.5px] tracking-[0.12em] uppercase whitespace-nowrap`}>
+              {r.auto || r.decision !== "play" ? DECISION_COPY[r.decision] : "suggested"}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function CriteriaGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="border-t border-line pt-3 mt-3 first-of-type:border-t-0 first-of-type:pt-0 first-of-type:mt-0">
+      <legend className="eyebrow pr-2">{title}</legend>
+      <div className="grid gap-4 sm:grid-cols-2 mt-2">{children}</div>
+    </fieldset>
+  );
+}
+
+function Toggle({ id, label, on, onChange }: { id: string; label: string; on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-2">
+      <span id={`${id}-label`}>
+        {label} — <b className="text-ink font-semibold">{on ? "autopilot plays it" : "suggest only"}</b>
+      </span>
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-labelledby={`${id}-label`}
+        onClick={() => onChange(!on)}
+        className={`${on ? INV : "text-ink-2"} border-[1.5px] border-line-strong px-2.5 py-1.5 text-[10.5px] tracking-[0.12em] uppercase min-w-[4.5rem]`}
+      >
+        {on ? "auto" : "manual"}
+      </button>
     </div>
   );
 }

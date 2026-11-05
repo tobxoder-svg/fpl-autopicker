@@ -241,7 +241,13 @@ export function buildBundle(
         penShare: 0,
         /** Kept for display only — see the note above. 1 = first-choice taker. */
         penaltiesOrder: el.penalties_order ?? null,
+        freekicksOrder: el.direct_freekicks_order ?? null,
+        cornersOrder: el.corners_and_indirect_freekicks_order ?? null,
         totalPoints: num(el.total_points),
+        // FPL's own next-gameweek projection and recent points per match — two of
+        // the captain picker's inputs (src/lib/captain.ts). Strings in the API.
+        epNext: el.ep_next == null ? null : round(num(el.ep_next), 2),
+        form: el.form == null ? null : round(num(el.form), 2),
       };
     });
 
@@ -288,12 +294,20 @@ export function buildBundle(
     .slice(0, 4)
     .map((e) => ({ event: e.id, deadline: e.deadline_time }));
 
+  // Chip windows. 2026/27 has two sets (GW1-19 and GW20-38); the API lists one
+  // entry per chip per half with its start/stop gameweek. Absent → the app
+  // falls back to those halves.
+  const chips = (boot.chips ?? [])
+    .filter((c) => c?.name && c.start_event != null && c.stop_event != null)
+    .map((c) => ({ name: c.name, startEvent: c.start_event, stopEvent: c.stop_event }));
+
   const bundle = {
     generatedAt,
     season: "2026/27",
     currentEvent: current?.id ?? null,
     nextEvent: next?.id ?? null,
     deadlines,
+    chips,
     teams,
     players,
     fixtures,

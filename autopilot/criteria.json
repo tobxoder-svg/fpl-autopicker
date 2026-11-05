@@ -1,5 +1,5 @@
 {
-  "_about": "Settings for the weekly autopilot. The GitHub job and the Autopilot tab both read this file, so what the tab previews is what runs. Edit on GitHub and commit; the next hourly run uses the new values. Hard limits are enforced in code: windowMaxH can never exceed 12, and hits are never taken whatever you set here.",
+  "_about": "Settings for the weekly autopilot. The GitHub job and the Autopilot tab both read this file, so what the tab previews is what runs. Edit on GitHub and commit; the next hourly run uses the new values. Hard limits are enforced in code: windowMaxH can never exceed 12, hits are never taken, one chip per gameweek, and Wildcard / Free Hit are never played by the autopilot.",
 
   "minGainPerTransfer": 1,
   "_minGainPerTransfer": "Expected points (over the next 5 gameweeks) each transfer must add, or the free transfer is saved. 0.1 to 5.",
@@ -11,5 +11,41 @@
   "_windowMaxH": "Act only within this many hours before the deadline. 2 to 12.",
 
   "windowMinH": 1,
-  "_windowMinH": "Stop this many hours before the deadline, so it never races the lock. 0.5 to 3."
+  "_windowMinH": "Stop this many hours before the deadline, so it never races the lock. 0.5 to 3.",
+
+  "alertLeadH": 36,
+  "_alertLeadH": "A heads-up alert (plan, captain, chips, any Wildcard/Free Hit suggestion) goes out this many hours before the deadline, so you have time to play a suggested chip. 12 to 72, always before the window.",
+
+  "oddsWeight": 0.5,
+  "_oddsWeight": "Captain: how much bookmaker odds (via ODDS_API_KEY) replace our model's expected goals and clean-sheet chances. 0 = model only, 1 = market only.",
+
+  "fplEpWeight": 0.25,
+  "_fplEpWeight": "Captain: share of the score taken from FPL's own projection (ep_next). 0 to 0.6.",
+
+  "formWeight": 0.1,
+  "_formWeight": "Captain: share taken from recent form (points per match, last 30 days). 0 to 0.4.",
+
+  "captainDifferential": 0,
+  "_captainDifferential": "Captain style. -1 = safe (template, steady), 0 = neutral, +1 = differential (low ownership, upside).",
+
+  "autoTripleCaptain": true,
+  "_autoTripleCaptain": "true = the autopilot plays Triple Captain itself when the week is right. false = it only suggests it.",
+
+  "autoBenchBoost": true,
+  "_autoBenchBoost": "true = the autopilot plays Bench Boost itself when the week is right. false = it only suggests it.",
+
+  "tcMinXp": 9,
+  "_tcMinXp": "Triple Captain only when the best starter is projected at least this many points (a double gameweek usually is). 4 to 20.",
+
+  "bbMinXp": 10,
+  "_bbMinXp": "Bench Boost only when the four on the bench are projected at least this many points together. 3 to 25.",
+
+  "chipWaitMarginPct": 15,
+  "_chipWaitMarginPct": "Hold a chip for a later gameweek only if that week is projected this much better (%). In the last gameweek before a chip expires it's played anyway. 0 to 50.",
+
+  "fhMinGain": 12,
+  "_fhMinGain": "Suggest a Free Hit when the best one-week squad beats yours by this many points. 4 to 40.",
+
+  "wcMinGain": 25,
+  "_wcMinGain": "Suggest a Wildcard when it beats your best free-transfer plan by this many points over 5 gameweeks. 5 to 80."
 }

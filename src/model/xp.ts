@@ -147,6 +147,17 @@ function lambdaConceded(team: Team, opponent: Team, home: boolean): number {
 }
 
 /**
+ * The goals the model expects each side to score in one fixture — the numbers
+ * the captain picker blends with bookmaker odds (src/lib/captain.ts).
+ */
+export function fixtureLambdas(team: Team, opponent: Team, home: boolean): { goalsFor: number; goalsAgainst: number } {
+  return {
+    goalsFor: LEAGUE_GOALS * attackMultiplier(team, opponent, home),
+    goalsAgainst: lambdaConceded(team, opponent, home),
+  };
+}
+
+/**
  * DEFCON opportunity scales with the OPPONENT's share of the ball. A defender
  * on a 37%-possession side spends far more of the match defending, and clears
  * the 10-action threshold far more often than an equally capable player at a

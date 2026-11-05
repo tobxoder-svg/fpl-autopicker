@@ -276,9 +276,13 @@ export function normaliseMyTeam(raw) {
   const unlimited = t.status === "unlimited" || t.limit == null;
   const freeTransfers = unlimited ? Infinity : Math.max(0, (t.limit ?? 0) - (t.made ?? 0));
 
+  // One entry per chip per half in 2026/27, each with its own window.
   const chips = (raw.chips ?? []).map((c) => ({
     name: c.name,
     available: (c.status_for_entry ?? c.status) === "available",
+    active: (c.status_for_entry ?? c.status) === "active" || raw.active_chip === c.name,
+    startEvent: c.start_event ?? null,
+    stopEvent: c.stop_event ?? null,
   }));
 
   return { picks, bank: t.bank ?? 0, freeTransfers, unlimited, made: t.made ?? 0, chips };
@@ -397,9 +401,11 @@ export function diffPlan({ current, plan, elements, teams = [], event, maxHits, 
   // --- chip
   const chip = plan.chip ?? null;
   if (chip) {
-    const c = current.chips.find((x) => x.name === chip);
-    if (!c) check("warn", `Chip "${chip}" not listed on my-team — cannot confirm it is available`);
-    else if (!c.available) check("fail", `Chip "${chip}" is not available this gameweek`);
+    const listed = current.chips.filter((x) => x.name === chip);
+    // "active" = the autopilot already set it on an earlier, unconfirmed run this week.
+    if (!listed.length) check("warn", `Chip "${chip}" not listed on my-team — cannot confirm it is available`);
+    else if (!listed.some((c) => c.available || c.active)) check("fail", `Chip "${chip}" is not available this gameweek`);
+    else check("ok", `Chip: ${chip}`);
   }
 
   // --- free transfers, hits, and whether the hits pay for themselves
@@ -444,7 +450,7 @@ export function diffPlan({ current, plan, elements, teams = [], event, maxHits, 
   const payloads = {
     transfers: transfers.length
       ? {
-          chip,
+          chip: freeChip ? chip : null,   // BB/TC go with the lineup, not the transfers
           entry: null, // filled at apply time
           event,
           transfers: transfers.map((t) => ({
@@ -516,7 +522,7 @@ export function renderReport(dl, d) {
  * The same proposal as structured JSON, for the app's Autopilot screen.
  * Names and prices are resolved here so the app needs no lookups.
  */
-export function toProposal(dl, d) {
+export function toProposal(dl, d, extra = {}) {
   const who = (id) => (id == null ? null : { id, name: d.name(id), pos: d.pos(id), club: d.clubName(d.info(id).team) });
   return {
     version: 1,
@@ -542,6 +548,7 @@ export function toProposal(dl, d) {
       benchOrder: d.lineup.benchOrder.map(who),
     },
     checks: d.checks,
+    ...extra,
   };
 }
 

@@ -32,11 +32,23 @@ jobs:
         # committing a bundle that would render every projection NaN.
         run: node scripts/fetch-fpl.mjs
 
+      # Optional: bookmaker odds for the Autopilot tab's captain pick. Needs the
+      # ODDS_API_KEY secret (free at the-odds-api.com, 2 credits a run). Skipped
+      # without it; a failure never blocks the FPL snapshot.
+      - name: Snapshot bookmaker odds
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: |
+          if [ -z "$ODDS_API_KEY" ]; then echo "No ODDS_API_KEY — skipping odds."; exit 0; fi
+          npm ci --no-audit --no-fund
+          npx tsx scripts/fetch-odds.ts
+
       - name: Commit if anything changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/data/bundle.json
+          if [ -f public/data/odds.json ]; then git add public/data/odds.json; fi
           if git diff --staged --quiet; then
             echo "No change in the snapshot — nothing to commit."
           else

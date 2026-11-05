@@ -63,6 +63,12 @@ export interface Player {
   penShare: number;
   /** Display only. 1 = first-choice penalty taker. */
   penaltiesOrder?: number | null;
+  freekicksOrder?: number | null;
+  cornersOrder?: number | null;
+  /** FPL's own expected points for the next gameweek (absent in older bundles). */
+  epNext?: number | null;
+  /** FPL form: average points per match over the last 30 days. */
+  form?: number | null;
   /** Season-to-date FPL points — used only for display and sanity checks. */
   totalPoints: number;
 }
@@ -98,6 +104,8 @@ export interface DataBundle {
   results?: MatchResult[];
   /** Upcoming FPL deadlines (ISO, UTC). Absent in older bundles. */
   deadlines?: Array<{ event: number; deadline: string }>;
+  /** Chip windows from the API (one entry per chip per half). Absent in older bundles. */
+  chips?: Array<{ name: string; startEvent: number; stopEvent: number }>;
 }
 
 /** One gameweek's fixture for one club. A double gameweek yields two entries. */

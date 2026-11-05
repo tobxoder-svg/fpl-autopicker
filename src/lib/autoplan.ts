@@ -32,6 +32,7 @@ import { fromSolution } from "./squad";
 // ---------------------------------------------------------------------------
 
 export interface AutoCriteria {
+  // --- transfers
   /** xP (5-GW horizon) each transfer must add, or the free transfer rolls. */
   minGainPerTransfer: number;
   /** How much xP the money tie-break may give up to leave more in the bank. */
@@ -40,40 +41,104 @@ export interface AutoCriteria {
   windowMaxH: number;
   /** ...and closes this many hours before it, so it never races the lock. */
   windowMinH: number;
+  /** A heads-up (plan, captain, chips) goes out this many hours before the deadline. */
+  alertLeadH: number;
+
+  // --- captain (src/lib/captain.ts)
+  /** 0 = our model only, 1 = bookmaker odds only, for each side's goals and clean sheets. */
+  oddsWeight: number;
+  /** Share of the captain score taken from FPL's own projection (ep_next). */
+  fplEpWeight: number;
+  /** Share taken from recent form (points per match, last 30 days). */
+  formWeight: number;
+  /** −1 safe (template, low variance) … 0 neutral … +1 differential (low ownership, upside). */
+  captainDifferential: number;
+
+  // --- chips (src/lib/chips.ts)
+  autoTripleCaptain: boolean;
+  autoBenchBoost: boolean;
+  /** Triple Captain only when the captain is projected at least this many xP. */
+  tcMinXp: number;
+  /** Bench Boost only when the four on the bench are projected at least this many xP. */
+  bbMinXp: number;
+  /** Wait for a later gameweek only if it's projected this much (%) better than now. */
+  chipWaitMarginPct: number;
+  /** Suggest a Free Hit when it beats your squad by this many xP this gameweek. */
+  fhMinGain: number;
+  /** Suggest a Wildcard when it beats your best free-transfer plan by this many xP (5 GWs). */
+  wcMinGain: number;
 }
+
+type NumKey = { [K in keyof AutoCriteria]: AutoCriteria[K] extends number ? K : never }[keyof AutoCriteria];
+type BoolKey = { [K in keyof AutoCriteria]: AutoCriteria[K] extends boolean ? K : never }[keyof AutoCriteria];
 
 export const HARD_WINDOW_CAP_H = 12;
 
-export const CRITERIA_LIMITS: Record<keyof AutoCriteria, { min: number; max: number; step: number }> = {
+export const CRITERIA_LIMITS: Record<NumKey, { min: number; max: number; step: number }> = {
   minGainPerTransfer: { min: 0.1, max: 5, step: 0.1 },
   bankToleranceXp: { min: 0, max: 10, step: 0.5 },
   windowMaxH: { min: 2, max: HARD_WINDOW_CAP_H, step: 1 },
   windowMinH: { min: 0.5, max: 3, step: 0.5 },
+  alertLeadH: { min: 12, max: 72, step: 1 },
+  oddsWeight: { min: 0, max: 1, step: 0.05 },
+  fplEpWeight: { min: 0, max: 0.6, step: 0.05 },
+  formWeight: { min: 0, max: 0.4, step: 0.05 },
+  captainDifferential: { min: -1, max: 1, step: 0.1 },
+  tcMinXp: { min: 4, max: 20, step: 0.5 },
+  bbMinXp: { min: 3, max: 25, step: 0.5 },
+  chipWaitMarginPct: { min: 0, max: 50, step: 5 },
+  fhMinGain: { min: 4, max: 40, step: 1 },
+  wcMinGain: { min: 5, max: 80, step: 1 },
 };
+export const BOOL_CRITERIA: BoolKey[] = ["autoTripleCaptain", "autoBenchBoost"];
 
 export const DEFAULT_CRITERIA: AutoCriteria = {
   minGainPerTransfer: 1,
   bankToleranceXp: 2,
   windowMaxH: 12,
   windowMinH: 1,
+  alertLeadH: 36,
+  oddsWeight: 0.5,
+  fplEpWeight: 0.25,
+  formWeight: 0.1,
+  captainDifferential: 0,
+  autoTripleCaptain: true,
+  autoBenchBoost: true,
+  tcMinXp: 9,
+  bbMinXp: 10,
+  chipWaitMarginPct: 15,
+  fhMinGain: 12,
+  wcMinGain: 25,
 };
 
 /** Fills gaps with defaults and clamps — the 12-hour cap can't be configured away. */
 export function normaliseCriteria(raw: Partial<Record<keyof AutoCriteria, unknown>> | null | undefined): AutoCriteria {
   const out = { ...DEFAULT_CRITERIA };
-  for (const key of Object.keys(CRITERIA_LIMITS) as Array<keyof AutoCriteria>) {
+  for (const key of Object.keys(CRITERIA_LIMITS) as NumKey[]) {
     const v = Number(raw?.[key]);
-    if (raw && raw[key] !== undefined && raw[key] !== "" && Number.isFinite(v)) {
+    if (raw && raw[key] !== undefined && raw[key] !== "" && raw[key] !== null && typeof raw[key] !== "boolean" && Number.isFinite(v)) {
       const { min, max } = CRITERIA_LIMITS[key];
       out[key] = Math.min(max, Math.max(min, v));
     }
   }
+  for (const key of BOOL_CRITERIA) {
+    const v = raw?.[key];
+    if (typeof v === "boolean") out[key] = v;
+    else if (v === "true" || v === "false") out[key] = v === "true";
+  }
   if (out.windowMinH >= out.windowMaxH) out.windowMinH = Math.min(DEFAULT_CRITERIA.windowMinH, out.windowMaxH / 2);
+  // The heads-up has to come before the window, or it's not a heads-up.
+  if (out.alertLeadH < out.windowMaxH + 1) out.alertLeadH = out.windowMaxH + 1;
+  // FPL's projection and form are seasoning; at least 20% of the captain score stays ours.
+  if (out.fplEpWeight + out.formWeight > 0.8) out.formWeight = Math.max(0, 0.8 - out.fplEpWeight);
   return out;
 }
 
 export function sameCriteria(a: AutoCriteria, b: AutoCriteria): boolean {
-  return (Object.keys(CRITERIA_LIMITS) as Array<keyof AutoCriteria>).every((k) => Math.abs(a[k] - b[k]) < 1e-9);
+  return (
+    (Object.keys(CRITERIA_LIMITS) as NumKey[]).every((k) => Math.abs(a[k] - b[k]) < 1e-9) &&
+    BOOL_CRITERIA.every((k) => a[k] === b[k])
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +334,8 @@ export interface WeekPlan {
     event: number;
     generated_at: string;
     source: string;
-    chip: null;
+    /** "bboost" or "3xc" when the autopilot plays one; otherwise null. */
+    chip: string | null;
     picks: Array<{ element: number; position: number; is_captain: boolean; is_vice_captain: boolean }>;
     xp: Record<string, number>;
   };

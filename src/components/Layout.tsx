@@ -265,7 +265,8 @@ export default function Layout() {
             >
               FD
             </span>
-            <span className="sm:hidden lg:inline font-display font-semibold text-[14px] uppercase tracking-[0.1em]">
+            {/* With the Install button showing, the wordmark doesn't fit a 390px phone. */}
+            <span className={`${installPrompt ? "hidden min-[440px]:inline" : ""} sm:hidden lg:inline font-display font-semibold text-[14px] uppercase tracking-[0.1em]`}>
               Fantasy Drafter
             </span>
           </NavLink>
