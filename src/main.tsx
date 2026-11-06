@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
-import Landing from "./routes/Landing";
+import LeagueDesk from "./routes/LeagueDesk";
 import Builder from "./routes/Builder";
 import Method from "./routes/Method";
 import Fixtures from "./routes/Fixtures";
@@ -17,13 +17,13 @@ createRoot(document.getElementById("root")!).render(
     <HashRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<LeagueDesk />} />
           <Route path="/builder" element={<Builder />} />
           <Route path="/fixtures" element={<Fixtures />} />
           <Route path="/my-team" element={<MyTeam />} />
           <Route path="/autopilot" element={<Autopilot />} />
           <Route path="/method" element={<Method />} />
-          <Route path="*" element={<Landing />} />
+          <Route path="*" element={<LeagueDesk />} />
         </Route>
       </Routes>
     </HashRouter>

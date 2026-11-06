@@ -69,6 +69,9 @@ export interface Player {
   epNext?: number | null;
   /** FPL form: average points per match over the last 30 days. */
   form?: number | null;
+  /** Season goals and assists (absent in older bundles). */
+  goals?: number;
+  assists?: number;
   /** Season-to-date FPL points — used only for display and sanity checks. */
   totalPoints: number;
 }

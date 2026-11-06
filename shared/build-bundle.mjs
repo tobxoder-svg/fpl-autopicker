@@ -244,6 +244,9 @@ export function buildBundle(
         freekicksOrder: el.direct_freekicks_order ?? null,
         cornersOrder: el.corners_and_indirect_freekicks_order ?? null,
         totalPoints: num(el.total_points),
+        // Season totals, for the League Desk's top-scorer and top-assist tables.
+        goals: num(el.goals_scored),
+        assists: num(el.assists),
         // FPL's own next-gameweek projection and recent points per match — two of
         // the captain picker's inputs (src/lib/captain.ts). Strings in the API.
         epNext: el.ep_next == null ? null : round(num(el.ep_next), 2),

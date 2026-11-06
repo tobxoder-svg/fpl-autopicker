@@ -155,15 +155,9 @@ function useInstallPrompt(): [InstallPromptEvent | null, () => void] {
 const NAV: Array<{ to: string; label: string; short: string; icon: React.ReactNode }> = [
   {
     to: "/",
-    label: "Overview",
-    short: "Home",
-    icon: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
-  },
-  {
-    to: "/builder",
-    label: "Builder",
-    short: "Build",
-    icon: <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4" />,
+    label: "League Desk",
+    short: "League",
+    icon: <path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM3 9h18M9 9v11M3 14.5h6" />,
   },
   {
     to: "/fixtures",
@@ -182,6 +176,12 @@ const NAV: Array<{ to: string; label: string; short: string; icon: React.ReactNo
     label: "Autopilot",
     short: "Auto",
     icon: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
+  },
+  {
+    to: "/builder",
+    label: "Builder",
+    short: "Build",
+    icon: <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4" />,
   },
   {
     to: "/method",
