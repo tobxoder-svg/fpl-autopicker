@@ -44,7 +44,12 @@ name: FPL autopilot
 
 on:
   schedule:
-    - cron: "7 * * * *"   # hourly
+    # Every 15 minutes. GitHub delays and silently DROPS scheduled runs when its
+    # shared runners are busy — an hourly schedule here actually fired about four
+    # times a day, so only one run landed in GW10's 11-hour window, and when that
+    # one failed there was no second chance. Asking more often buys retries; each
+    # run is a few seconds and exits immediately outside the window.
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       preview:

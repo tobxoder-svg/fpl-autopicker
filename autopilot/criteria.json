@@ -1,5 +1,5 @@
 {
-  "_about": "Settings for the weekly autopilot. The GitHub job and the Autopilot tab both read this file, so what the tab previews is what runs. Edit on GitHub and commit; the next hourly run uses the new values. Hard limits are enforced in code: windowMaxH can never exceed 12, hits are never taken, one chip per gameweek, and Wildcard / Free Hit are never played by the autopilot.",
+  "_about": "Settings for the weekly autopilot. The GitHub job and the Autopilot tab both read this file, so what the tab previews is what runs. Edit on GitHub and commit; the next run uses the new values. Hard limits are enforced in code: windowMaxH can never exceed 12, hits are never taken, one chip per gameweek, and Wildcard / Free Hit are never played by the autopilot.",
 
   "minGainPerTransfer": 1,
   "_minGainPerTransfer": "Expected points (over the next 5 gameweeks) each transfer must add, or the free transfer is saved. 0.1 to 5.",
@@ -7,7 +7,7 @@
   "bankToleranceXp": 2,
   "_bankToleranceXp": "How many expected points the money rule may give up to leave more in the bank. 0 = always the top-scoring option. 0 to 10.",
 
-  "windowMaxH": 12,
+  "windowMaxH": 6,
   "_windowMaxH": "Act only within this many hours before the deadline. 2 to 12.",
 
   "windowMinH": 1,

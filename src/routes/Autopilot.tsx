@@ -8,7 +8,7 @@ import { fetchEntry, ID_KEY, readStore, writeStore, type Loaded } from "../lib/e
 import {
   CRITERIA_LIMITS,
   HARD_WINDOW_CAP_H,
-  RUN_MINUTE,
+  RUN_EVERY_MIN,
   buildContext,
   finishPlan,
   normaliseCriteria,
@@ -694,7 +694,7 @@ function StatusLine({
     small = `Too close to the deadline — the autopilot stops ${clock(win.closesAt)} so it never races the lock.`;
   } else if (win.phase === "open") {
     big = win.expectedRun ? `Executes ≈ ${clock(win.expectedRun)}` : "Window open";
-    small = `Window open until ${clock(win.closesAt)}. Runs hourly at :${String(RUN_MINUTE).padStart(2, "0")}; GitHub can start a few minutes late.`;
+    small = `Window open until ${clock(win.closesAt)}. A run is asked for every ${RUN_EVERY_MIN} minutes, but GitHub delays and sometimes skips scheduled runs, so the exact time varies.`;
   } else {
     big = `Executes in ${dhm((win.expectedRun ?? win.opensAt).getTime() - now.getTime())}`;
     small = `First run inside the window ≈ ${when(win.expectedRun ?? win.opensAt)} (window opens ${when(win.opensAt)}).`;

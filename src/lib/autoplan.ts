@@ -511,7 +511,12 @@ export interface WindowState {
   expectedRun: Date | null;
 }
 
-export const RUN_MINUTE = 7;
+/**
+ * The schedule asks for a run every 15 minutes, but GitHub delays and drops
+ * scheduled runs freely, so a run can land anywhere — treat anything derived
+ * from this as "roughly", never a promise.
+ */
+export const RUN_EVERY_MIN = 15;
 
 export function windowState(deadline: Date, criteria: AutoCriteria, now: Date): WindowState {
   const h = 3_600_000;
@@ -519,8 +524,8 @@ export function windowState(deadline: Date, criteria: AutoCriteria, now: Date): 
   const closesAt = new Date(deadline.getTime() - criteria.windowMinH * h);
   const nextRunAfter = (t: Date) => {
     const r = new Date(t);
-    r.setUTCMinutes(RUN_MINUTE, 0, 0);
-    if (r.getTime() <= t.getTime()) r.setUTCHours(r.getUTCHours() + 1);
+    const m = r.getUTCMinutes();
+    r.setUTCMinutes(Math.ceil((m + 0.001) / RUN_EVERY_MIN) * RUN_EVERY_MIN, 0, 0);
     return r;
   };
   let phase: WindowState["phase"];
