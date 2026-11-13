@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.vercel.fpl_autopicker.twa",
+        "sha256_cert_fingerprints": ["E1:E1:14:7C:AA:9B:7B:8C:C4:ED:ED:A7:4A:8E:D5:73:F9:15:22:B2:8F:5C:C2:64:D3:E2:69:A5:0F:07:B6:9E"]
+      }
+    }]
